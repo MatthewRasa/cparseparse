@@ -16,7 +16,7 @@
 #include <vector>
 #include <unordered_map>
 
-namespace cpp_argparse {
+namespace argparse {
 
 	/**
 	 * Command-line argument parser.
@@ -52,10 +52,19 @@ namespace cpp_argparse {
 		 *
 		 * @tparam String  string-like type that is convertible to @a std::string.
 		 * @param name     positional argument name.
+		 * @throw std::logic_error  If @a name is not in the correct format, it is a
+		 *                          duplicate, or it conflicts with an optional argument
+		 *                          name.
 		 */
 		template<class String>
 		void add_positional(String &&name) {
-			m_positional_args.push_back(std::make_pair(std::forward<String>(name), ""));
+			if (!format_option_name(name).empty())
+				throw std::logic_error{lerrstr("invalid positional argument name '", name, "'")};
+			if (m_positional_args.find(name) != m_positional_args.end())
+				throw std::logic_error{lerrstr("duplicate positional argument name '", name, "'")};
+			if (m_optional_args.find(name) != m_optional_args.end())
+				throw std::logic_error{lerrstr("positional argument name conflicts with optional argument reference name '", name, "'")};
+			m_positional_order.push_back(m_positional_args.emplace(std::forward<String>(name), "").first->first);
 		}
 
 		/**
@@ -71,8 +80,9 @@ namespace cpp_argparse {
 		 * @param default_val  value used when the user does not provide a value for the
 		 *                     argument.
 		 * @return The reference name.
-		 * @throw std::logic_error  If @a long_name is not in the correct format or is a
-		 *                          duplicate.
+		 * @throw std::logic_error  If @a long_name is not in the correct format, it is
+		 *                          a duplicate, or it conflicts with an optional
+		 *                          argument name.
 		 */
 		template<class Default = std::string>
 		std::string add_optional(std::string long_name, Optional_Type type = Optional_Type::SINGLE, Default &&default_val = "") {
@@ -81,6 +91,8 @@ namespace cpp_argparse {
 				throw std::logic_error{lerrstr("invalid optional argument name: ", long_name)};
 			if (m_optional_args.find(formatted_name) != m_optional_args.end())
 				throw std::logic_error{lerrstr("duplicate optional argument name '", formatted_name, "'")};
+			if (m_positional_args.find(formatted_name) != m_positional_args.end())
+				throw std::logic_error{lerrstr("optional argument reference name conflicts with positional argument name '", formatted_name, "'")};
 			return m_optional_args.emplace(std::move(formatted_name),
 					Optional_Info{type, type == Optional_Type::FLAG ? "false" : arg_to_string(std::forward<Default>(default_val)), {}}).first->first;
 		}
@@ -120,29 +132,45 @@ namespace cpp_argparse {
 		 * program arguments.
 		 *
 		 * This function must be called before arg() can be used to retrieve the values.
+		 * After the call, argc and argv are updated to refer to any remaining
+		 * command-line arguments not matched by the registered arguments.
 		 *
-		 * @param argc  command-line argument count
-		 * @param argv  command-line argument strings
+		 * @param argc  reference to command-line argument count
+		 * @param argv  reference to command-line argument strings
 		 * @throw std::runtime_error  If a positional argument is missing, a value for
 		 *                            an optional argument is missing, or an optional
 		 *                            argument value was supplied an incorrect number of
 		 *                            times.
 		 */
-		void parse_args(int argc, char *argv[]) {
+		void parse_args(int &argc, char **&argv) {
+			parse_args(argc, const_cast<char const **&>(argv));
+		}
+		void parse_args(int &argc, char const **&argv) {
 			m_scriptname = argv[0];
 
-			std::size_t pos_idx = 0;
-			for (std::size_t argi = 1; argi < argc; ++argi) {
+			auto optional_args = m_optional_args;
+			std::vector<const char *> positional_args;
+			positional_args.reserve(argc - 1);
+
+			for (int argi = 1; argi < argc; ++argi) {
 				std::string string_arg{argv[argi]};
 				auto formatted_name = format_option_name(string_arg);
-				if (!formatted_name.empty()) {
-					argi = parse_optional_arg(string_arg, formatted_name, argi, argc, argv);
-				} else if (pos_idx < m_positional_args.size()) {
-					m_positional_args[pos_idx++].second = std::move(string_arg);
-				}
+				if (!formatted_name.empty())
+					argi = parse_optional_arg(optional_args, string_arg, formatted_name, argi, argc, argv);
+				else
+					positional_args.push_back(argv[argi]);
 			}
-			if (pos_idx < m_positional_args.size())
-				throw std::runtime_error{errstr("requires positional argument '", m_positional_args[pos_idx].first, "'")};
+			if (positional_args.size() < m_positional_order.size())
+				throw std::runtime_error{errstr("requires positional argument '", m_positional_order[positional_args.size()], "'")};
+
+			m_optional_args = optional_args;
+			std::size_t pos_idx;
+			for (pos_idx = 0; pos_idx < m_positional_order.size(); ++pos_idx)
+				m_positional_args[m_positional_order[pos_idx]] = positional_args[pos_idx];
+
+			argc = positional_args.size() - pos_idx + 1;
+			for ( ; pos_idx < positional_args.size(); ++pos_idx)
+				argv[pos_idx - m_positional_order.size() + 1] = positional_args[pos_idx];
 		}
 
 		/**
@@ -192,8 +220,7 @@ namespace cpp_argparse {
 			if (opt_it != m_optional_args.cend()) {
 				value = optional_arg(opt_it, idx);
 			} else {
-				const auto it = std::find_if(m_positional_args.cbegin(), m_positional_args.cend(),
-					[&name](const std::pair<std::string, std::string> &pair) { return pair.first == name; });
+				const auto it = m_positional_args.find(name);
 				if (it == m_positional_args.cend())
 					throw std::logic_error{lerrstr("no argument by the name '", name, "'")};
 				value = it->second;
@@ -245,30 +272,32 @@ namespace cpp_argparse {
 		};
 
 		std::string m_scriptname;
-		std::vector<std::pair<std::string, std::string>> m_positional_args;
+		std::vector<std::string> m_positional_order;
+		std::unordered_map<std::string, std::string> m_positional_args;
 		std::unordered_map<std::string, Optional_Info> m_optional_args;
 		std::unordered_map<char, std::string> m_flags;
 
 		/**
 		 * Parse optional argument from the list of user-provided arguments.
 		 */
-		std::size_t parse_optional_arg(const std::string &option_name, const std::string &formatted_name, std::size_t argi, int argc, char *argv[]) {
-			auto it = m_optional_args.find(formatted_name);
-			if (it == m_optional_args.end() && option_name.size() == 2) {
+		std::size_t parse_optional_arg(std::unordered_map<std::string, Optional_Info> &optional_args,
+				const std::string &option_name, const std::string &formatted_name, int argi, int argc, char const **argv) {
+			auto it = optional_args.find(formatted_name);
+			if (it == optional_args.end() && option_name.size() == 2) {
 				auto flag_it = m_flags.find(formatted_name[0]);
 				if (flag_it != m_flags.end())
-					it = m_optional_args.find(flag_it->second);
+					it = optional_args.find(flag_it->second);
 			}
-			if (it == m_optional_args.end())
+			if (it == optional_args.end())
 				throw std::runtime_error{errstr("invalid option '", option_name, "', pass --help to display possible options")};
 			if (it->second.type == Optional_Type::FLAG) {
 				if (!it->second.values.empty())
 					throw std::runtime_error{errstr("'", option_name, "' should only be specified once")};
 				it->second.values.push_back("true");
 			} else {
-				if (argi + 1 == argc)
+				if (++argi == argc)
 					throw std::runtime_error{errstr("'", option_name, "' requires a value")};
-				std::string string_val{argv[argi + 1]};
+				std::string string_val{argv[argi]};
 				if (!format_option_name(string_val).empty())
 					throw std::runtime_error{errstr("'", option_name, "' requires a value")};
 				if (it->second.type != Optional_Type::APPEND && !it->second.values.empty())
@@ -307,11 +336,17 @@ namespace cpp_argparse {
 			throw std::runtime_error{errstr("'", name, "' must be either 'true' or 'false'")};
 		}
 		template<class T>
+		typename std::enable_if<std::is_same<T, char>::value, T>::type parse_string_arg(const std::string &name, const std::string &value) const {
+			if (value.size() != 1)
+				throw std::runtime_error{errstr("'", name, "' must be a single character")};
+			return value[0];
+		}
+		template<class T>
 		typename std::enable_if<!std::is_same<T, bool>::value && std::is_integral<T>::value && std::is_unsigned<T>::value, T>::type parse_string_arg(const std::string &name, const std::string &value) const {
 			return parse_numeric_arg<T>(name, value, [](const std::string &value) { return stoull(value); });
 		}
 		template<class T>
-		typename std::enable_if<std::is_integral<T>::value && std::is_signed<T>::value, T>::type parse_string_arg(const std::string &name, const std::string &value) const {
+		typename std::enable_if<!std::is_same<T, char>::value && std::is_integral<T>::value && std::is_signed<T>::value, T>::type parse_string_arg(const std::string &name, const std::string &value) const {
 			return parse_numeric_arg<T>(name, value, [](const std::string &value) { return std::stoll(value); });
 		}
 		template<class T>
@@ -319,7 +354,7 @@ namespace cpp_argparse {
 			return parse_numeric_arg<T>(name, value, [](const std::string &value) { return std::stold(value); });
 		}
 		template<class T>
-		typename std::enable_if<std::is_same<T, std::string>::value, T>::type parse_string_arg(const std::string &name, const std::string &value) const {
+		typename std::enable_if<std::is_same<T, std::string>::value, T>::type parse_string_arg(const std::string &, const std::string &value) const {
 			return value;
 		}
 
@@ -330,7 +365,7 @@ namespace cpp_argparse {
 		T parse_numeric_arg(const std::string &name, const std::string &value, Convert_Func &&convert_func) const {
 			try {
 				const auto n_value = convert_func(value);
-				if (n_value < std::numeric_limits<T>::min() || n_value > std::numeric_limits<T>::max())
+				if (n_value < std::numeric_limits<T>::lowest() || n_value > std::numeric_limits<T>::max())
 					throw std::out_of_range{""};
 				return n_value;
 			} catch (const std::invalid_argument &ex) {
