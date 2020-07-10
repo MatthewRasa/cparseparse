@@ -8,6 +8,7 @@
 #define CPP_ARGPARSE_ARGUMENT_PARSER
 
 #include <algorithm>
+#include <regex>
 #include <stdexcept>
 #include <string>
 #include <sstream>
@@ -58,7 +59,7 @@ namespace argparse {
 		 */
 		template<class String>
 		void add_positional(String &&name) {
-			if (!format_option_name(name).empty())
+			if (!valid_positional_name(name))
 				throw std::logic_error{lerrstr("invalid positional argument name '", name, "'")};
 			if (m_positional_args.find(name) != m_positional_args.end())
 				throw std::logic_error{lerrstr("duplicate positional argument name '", name, "'")};
@@ -86,7 +87,7 @@ namespace argparse {
 		 */
 		template<class Default = std::string>
 		std::string add_optional(std::string long_name, Optional_Type type = Optional_Type::SINGLE, Default &&default_val = "") {
-			auto formatted_name = format_option_name(long_name);
+			const auto formatted_name = format_option_name(long_name);
 			if (formatted_name.empty())
 				throw std::logic_error{lerrstr("invalid optional argument name: ", long_name)};
 			if (m_optional_args.find(formatted_name) != m_optional_args.end())
@@ -119,11 +120,12 @@ namespace argparse {
 		 */
 		template<class String, class Default = std::string>
 		std::string add_optional(std::string flag, String &&long_name, Optional_Type type = Optional_Type::SINGLE, Default &&default_val = "") {
-			if (flag.size() != 2 || flag[0] != '-' || !valid_option_char(flag[1]))
+			const auto formatted_name = format_flag_name(flag);
+			if (formatted_name.empty())
 				throw std::logic_error{lerrstr("invalid flag name '", flag, "'")};
-			if (m_flags.find(flag[1]) != m_flags.end())
+			if (m_flags.find(formatted_name[0]) != m_flags.end())
 				throw std::logic_error{lerrstr("duplicate flag name '", flag, "'")};
-			return m_flags.emplace(flag[1],
+			return m_flags.emplace(formatted_name[0],
 					add_optional(std::forward<String>(long_name), std::move(type), std::forward<Default>(default_val))).first->second;
 		}
 
@@ -278,6 +280,33 @@ namespace argparse {
 		std::unordered_map<char, std::string> m_flags;
 
 		/**
+		 * Check whether the positional argument name is valid.
+		 */
+		bool valid_positional_name(const std::string &name) const {
+			std::cmatch m;
+			std::regex_match(name.c_str(), m, std::regex("\\w[a-zA-Z0-9_-]*"));
+			return !m.empty();
+		}
+
+		/**
+		 * Format the option name by removing the any leading '-' characters.
+		 */
+		std::string format_option_name(const std::string &name) const {
+			std::cmatch m;
+			std::regex_match(name.c_str(), m, std::regex("--?([a-zA-Z_][a-zA-Z0-9_-]*)"));
+			return m.size() < 2 ? "" : m[1].str();
+		}
+
+		/**
+		 * Format the flag name by removing the leading '-' character.
+		 */
+		std::string format_flag_name(const std::string &name) const {
+			std::cmatch m;
+			std::regex_match(name.c_str(), m, std::regex("-([a-zA-Z_])"));
+			return m.size() < 2 ? "" : m[1].str();
+		}
+
+		/**
 		 * Parse optional argument from the list of user-provided arguments.
 		 */
 		std::size_t parse_optional_arg(std::unordered_map<std::string, Optional_Info> &optional_args,
@@ -385,21 +414,6 @@ namespace argparse {
 		template<class T>
 		typename std::enable_if<!std::is_convertible<T, std::string>::value, std::string>::type arg_to_string(T &&arg) const {
 			return std::to_string(arg);
-		}
-
-		/**
-		 * Format the option name by removing the any leading '-' characters.
-		 */
-		std::string format_option_name(const std::string &option_name) const noexcept {
-			if (option_name.size() < 2 || option_name[0] != '-')
-				return "";
-			std::size_t start_idx = 1;
-			if (option_name[start_idx] == '-') {
-				if (option_name.size() < 3)
-					return "";
-				++start_idx;
-			}
-			return valid_option_char(option_name[start_idx]) ? option_name.substr(start_idx) : "";
 		}
 
 		/**
