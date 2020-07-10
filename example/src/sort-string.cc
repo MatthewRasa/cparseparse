@@ -1,4 +1,5 @@
 #include "argument-parser.h"
+#include <chrono>
 #include <functional>
 #include <iostream>
 #include <string>
@@ -11,8 +12,11 @@ int main(int argc, char *argv[]) {
 	parser.add_optional("-i", "--invert", Opt_Type::FLAG);
 	parser.add_optional("-r", "--repeat", Opt_Type::SINGLE, 1);
 	parser.add_optional("-f", "--filter", Opt_Type::APPEND);
+	parser.add_optional("--show-time", Opt_Type::FLAG);
 	try {
 		parser.parse_args(argc, argv);
+
+		const auto tstart = std::chrono::high_resolution_clock::now();
 
 		auto string_val = parser.arg<std::string>("string");
 
@@ -30,6 +34,10 @@ int main(int argc, char *argv[]) {
 				std::cout << string_val;
 			std::cout << std::endl;
 		}
+
+		const auto tend = std::chrono::high_resolution_clock::now();
+		if (parser.arg<bool>("show-time"))
+			std::cout << "Completed in: " << std::chrono::duration_cast<std::chrono::microseconds>(tend - tstart).count() << " us" << std::endl;
 
 		return 0;
 	} catch (const std::exception &ex) {

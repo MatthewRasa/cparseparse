@@ -8,6 +8,8 @@
 #define CPP_ARGPARSE_ARGUMENT_PARSER
 
 #include <algorithm>
+#include <iomanip>
+#include <iostream>
 #include <regex>
 #include <stdexcept>
 #include <string>
@@ -44,6 +46,10 @@ namespace argparse {
 		enum class Optional_Type {
 			FLAG, SINGLE, APPEND
 		};
+
+		Argument_Parser() {
+			add_optional("-h", "--help", Optional_Type::FLAG);
+		}
 
 		/**
 		 * Define a positional argument with the given name.
@@ -94,8 +100,10 @@ namespace argparse {
 				throw std::logic_error{lerrstr("duplicate optional argument name '", formatted_name, "'")};
 			if (m_positional_args.find(formatted_name) != m_positional_args.end())
 				throw std::logic_error{lerrstr("optional argument reference name conflicts with positional argument name '", formatted_name, "'")};
-			return m_optional_args.emplace(std::move(formatted_name),
-					Optional_Info{type, type == Optional_Type::FLAG ? "false" : arg_to_string(std::forward<Default>(default_val)), {}}).first->first;
+			m_optional_args.emplace(formatted_name,
+					Optional_Info{' ', type, type == Optional_Type::FLAG ? "false" : arg_to_string(std::forward<Default>(default_val)), {}, ""}).first->first;
+			m_optional_order.push_back(formatted_name);
+			return formatted_name;
 		}
 
 		/**
@@ -125,8 +133,10 @@ namespace argparse {
 				throw std::logic_error{lerrstr("invalid flag name '", flag, "'")};
 			if (m_flags.find(formatted_name[0]) != m_flags.end())
 				throw std::logic_error{lerrstr("duplicate flag name '", flag, "'")};
-			return m_flags.emplace(formatted_name[0],
-					add_optional(std::forward<String>(long_name), std::move(type), std::forward<Default>(default_val))).first->second;
+			const auto it = m_flags.emplace(formatted_name[0],
+					add_optional(std::forward<String>(long_name), std::move(type), std::forward<Default>(default_val))).first;
+			m_optional_args[it->second].flag = it->first;
+			return it->second;
 		}
 
 		/**
@@ -156,9 +166,8 @@ namespace argparse {
 
 			for (int argi = 1; argi < argc; ++argi) {
 				std::string string_arg{argv[argi]};
-				auto formatted_name = format_option_name(string_arg);
-				if (!formatted_name.empty())
-					argi = parse_optional_arg(optional_args, string_arg, formatted_name, argi, argc, argv);
+				if (valid_option_name(string_arg))
+					argi = parse_optional_arg(optional_args, string_arg, argi, argc, argv);
 				else
 					positional_args.push_back(argv[argi]);
 			}
@@ -246,6 +255,40 @@ namespace argparse {
 			return opt_it->second.values.size();
 		}
 
+		/**
+		 * Print help text to stdout.
+		 */
+		void print_help() const {
+			std::cout << "Usage: " << m_scriptname;
+			if (!m_optional_args.empty())
+				std::cout << " [options]";
+			for (const auto &positional : m_positional_order)
+				std::cout << " <" << positional << ">";
+			std::cout << std::endl;
+
+			if (!m_positional_order.empty()) {
+				std::cout << std::endl << "Positional arguments:" << std::endl;
+				for (const auto &positional : m_positional_order) {
+					std::cout << "  ";
+					std::cout << std::left << std::setw(18) << positional << "" << std::endl;
+				}
+			}
+			if (!m_optional_args.empty()) {
+				std::cout << std::endl << "Options:" << std::endl;
+				for (const auto &optional : m_optional_order) {
+					const auto &info = m_optional_args.at(optional);
+					std::stringstream ss;
+					ss << "  ";
+					if (info.flag != ' ')
+						ss << "-" << info.flag << ", ";
+					ss << "--" << optional;
+					if (info.type != Optional_Type::FLAG)
+						ss << " " << str_to_upper(optional);
+					std::cout << std::left << std::setw(30) << ss.str() << info.help_text << std::endl;
+				}
+			}
+		}
+
 	private:
 
 		/**
@@ -265,17 +308,29 @@ namespace argparse {
 		}
 
 		/**
+		 * Convert string to all uppercase characters.
+		 */
+		static std::string str_to_upper(const std::string &str) {
+			std::string rtn;
+			std::transform(str.begin(), str.end(), rtn.begin(), toupper);
+			return rtn;
+		}
+
+		/**
 		 * Optional info struct.
 		 */
 		struct Optional_Info {
+			char flag;
 			Optional_Type type;
 			std::string default_val;
 			std::vector<std::string> values;
+			std::string help_text;
 		};
 
 		std::string m_scriptname;
 		std::vector<std::string> m_positional_order;
 		std::unordered_map<std::string, std::string> m_positional_args;
+		std::vector<std::string> m_optional_order;
 		std::unordered_map<std::string, Optional_Info> m_optional_args;
 		std::unordered_map<char, std::string> m_flags;
 
@@ -289,11 +344,20 @@ namespace argparse {
 		}
 
 		/**
+		 * Check whether the optional argument name is valid.
+		 */
+		bool valid_option_name(const std::string &name) {
+			std::cmatch m;
+			std::regex_match(name.c_str(), m, std::regex("-([a-zA-Z_]|-?[a-zA-Z_][a-zA-Z0-9_-]+)"));
+			return !m.empty();
+		}
+
+		/**
 		 * Format the option name by removing the any leading '-' characters.
 		 */
 		std::string format_option_name(const std::string &name) const {
 			std::cmatch m;
-			std::regex_match(name.c_str(), m, std::regex("--?([a-zA-Z_][a-zA-Z0-9_-]*)"));
+			std::regex_match(name.c_str(), m, std::regex("--?([a-zA-Z_][a-zA-Z0-9_-]+)"));
 			return m.size() < 2 ? "" : m[1].str();
 		}
 
@@ -310,13 +374,14 @@ namespace argparse {
 		 * Parse optional argument from the list of user-provided arguments.
 		 */
 		std::size_t parse_optional_arg(std::unordered_map<std::string, Optional_Info> &optional_args,
-				const std::string &option_name, const std::string &formatted_name, int argi, int argc, char const **argv) {
-			auto it = optional_args.find(formatted_name);
-			if (it == optional_args.end() && option_name.size() == 2) {
-				auto flag_it = m_flags.find(formatted_name[0]);
-				if (flag_it != m_flags.end())
-					it = optional_args.find(flag_it->second);
+				const std::string &option_name, int argi, int argc, char const **argv) {
+			const auto formatted_option_name = lookup_formatted_option_name(option_name);
+			if (formatted_option_name == "help") {
+				print_help();
+				std::exit(0);
 			}
+
+			auto it = optional_args.find(formatted_option_name);
 			if (it == optional_args.end())
 				throw std::runtime_error{errstr("invalid option '", option_name, "', pass --help to display possible options")};
 			if (it->second.type == Optional_Type::FLAG) {
@@ -327,13 +392,28 @@ namespace argparse {
 				if (++argi == argc)
 					throw std::runtime_error{errstr("'", option_name, "' requires a value")};
 				std::string string_val{argv[argi]};
-				if (!format_option_name(string_val).empty())
+				if (valid_option_name(string_val))
 					throw std::runtime_error{errstr("'", option_name, "' requires a value")};
 				if (it->second.type != Optional_Type::APPEND && !it->second.values.empty())
 					throw std::runtime_error{errstr("'", option_name, "' should only be specified once")};
 				it->second.values.push_back(std::move(string_val));
 			}
 			return argi;
+		}
+
+		/**
+		 * Look up the option name as either a flag or option argument and
+		 * return the formatted option name.
+		 */
+		std::string lookup_formatted_option_name(const std::string &option_name) const {
+			const auto flag_name = format_flag_name(option_name);
+			if (!flag_name.empty()) {
+				const auto flag_it = m_flags.find(flag_name[0]);
+				if (flag_it == m_flags.end())
+					throw std::runtime_error{errstr("invalid flag '", option_name, "', pass --help to display possible options")};
+				return flag_it->second;
+			}
+			return format_option_name(option_name);
 		}
 
 		/**
