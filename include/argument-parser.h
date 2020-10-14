@@ -58,21 +58,25 @@ namespace argparse {
 		 * The assigned name is referenced in the help text and can be passed to arg()
 		 * to retrieve the argument value.
 		 *
-		 * @tparam String  string-like type that is convertible to @a std::string.
-		 * @param name     positional argument name.
+		 * @tparam Name_String  string-like type that is convertible to @a std::string.
+		 * @tparam Help_String  string-like type that is convertible to @a std::string.
+		 * @param name          positional argument name.
+		 * @param help_text     text accompanying the argument when displaying program
+		 *                      help.
 		 * @throw std::logic_error  If @a name is not in the correct format, it is a
 		 *                          duplicate, or it conflicts with an optional argument
 		 *                          name.
 		 */
-		template<class String>
-		void add_positional(String &&name) {
+		template<class Name_String, class Help_String = const char *>
+		void add_positional(Name_String &&name, Help_String &&help_text = "") {
 			if (!valid_positional_name(name))
 				throw std::logic_error{lerrstr("invalid positional argument name '", name, "'")};
 			if (m_positional_args.find(name) != m_positional_args.end())
 				throw std::logic_error{lerrstr("duplicate positional argument name '", name, "'")};
 			if (m_optional_args.find(name) != m_optional_args.end())
 				throw std::logic_error{lerrstr("positional argument name conflicts with optional argument reference name '", name, "'")};
-			m_positional_order.push_back(m_positional_args.emplace(std::forward<String>(name), "").first->first);
+			m_positional_order.push_back(m_positional_args.emplace(
+					std::forward<Name_String>(name), Positional_Info{"", std::forward<Help_String>(help_text)}).first->first);
 		}
 
 		/**
@@ -82,14 +86,19 @@ namespace argparse {
 		 * reference name is referenced in the help text and can be passed to arg() or
 		 * arg_at() to retrieve the argument value.
 		 *
-		 * @param long_name  argument "long" name (starts with @p '-' or @p '--'
-		 *                   followed by a non-digit character).
+		 * @tparam Help_String  string-like type that is convertible to @a std::string.
+		 * @param long_name     argument "long" name (starts with @p '-' or @p '--'
+		 *                      followed by a non-digit character).
+		 * @param type          optional argument type.
+		 * @param help_text     text accompanying the argument when displaying program
+		 *                      help.
 		 * @return The reference name.
 		 * @throw std::logic_error  If @a long_name is not in the correct format, it is
 		 *                          a duplicate, or it conflicts with an optional
 		 *                          argument name.
 		 */
-		std::string add_optional(std::string long_name, Optional_Type type = Optional_Type::SINGLE) {
+		template<class Help_String = const char *>
+		std::string add_optional(std::string long_name, Optional_Type type = Optional_Type::SINGLE, Help_String &&help_text = "") {
 			const auto formatted_name = format_option_name(long_name);
 			if (formatted_name.empty())
 				throw std::logic_error{lerrstr("invalid optional argument name: ", long_name)};
@@ -98,7 +107,7 @@ namespace argparse {
 			if (m_positional_args.find(formatted_name) != m_positional_args.end())
 				throw std::logic_error{lerrstr("optional argument reference name conflicts with positional argument name '", formatted_name, "'")};
 			m_optional_args.emplace(formatted_name,
-					Optional_Info{' ', type, {}, ""}).first->first;
+					Optional_Info{' ', type, {}, std::forward<Help_String>(help_text)}).first->first;
 			m_optional_order.push_back(formatted_name);
 			return formatted_name;
 		}
@@ -110,24 +119,28 @@ namespace argparse {
 		 * reference name is referenced in the help text and can be passed to arg() or
 		 * arg_at() to retrieve the argument value.
 		 *
-		 * @tparam String    string-like type that is convertible to @a std::string.
-		 * @param flag       flag name (@p '-' followed by a single non-digit
-		 *                   character).
-		 * @param long_name  argument "long" name (starts with @p '-' or @p '--'
-		 *                   followed by a non-digit character).
+		 * @tparam String       string-like type that is convertible to @a std::string.
+		 * @tparam Help_String  string-like type that is convertible to @a std::string.
+		 * @param flag          flag name (@p '-' followed by a single non-digit
+		 *                      character).
+		 * @param long_name     argument "long" name (starts with @p '-' or @p '--'
+		 *                      followed by a non-digit character).
+		 * @param type          optional argument type.
+		 * @param help_text     text accompanying the argument when displaying program
+		 *                      help.
 		 * @return The reference name.
 		 * @throw std::logic_error  If either @a flag or @a long_name are not in the
 		 *                          correct format or are duplicates.
 		 */
-		template<class String>
-		std::string add_optional(std::string flag, String &&long_name, Optional_Type type = Optional_Type::SINGLE) {
+		template<class String, class Help_String = const char *>
+		std::string add_optional(std::string flag, String &&long_name, Optional_Type type = Optional_Type::SINGLE, Help_String &&help_text = "") {
 			const auto formatted_name = format_flag_name(flag);
 			if (formatted_name.empty())
 				throw std::logic_error{lerrstr("invalid flag name '", flag, "'")};
 			if (m_flags.find(formatted_name[0]) != m_flags.end())
 				throw std::logic_error{lerrstr("duplicate flag name '", flag, "'")};
 			const auto it = m_flags.emplace(formatted_name[0],
-					add_optional(std::forward<String>(long_name), std::move(type))).first;
+					add_optional(std::forward<String>(long_name), std::move(type), std::forward<Help_String>(help_text))).first;
 			m_optional_args[it->second].flag = it->first;
 			return it->second;
 		}
@@ -170,7 +183,7 @@ namespace argparse {
 			m_optional_args = optional_args;
 			std::size_t pos_idx;
 			for (pos_idx = 0; pos_idx < m_positional_order.size(); ++pos_idx)
-				m_positional_args[m_positional_order[pos_idx]] = positional_args[pos_idx];
+				m_positional_args[m_positional_order[pos_idx]].value = positional_args[pos_idx];
 
 			argc = positional_args.size() - pos_idx + 1;
 			for ( ; pos_idx < positional_args.size(); ++pos_idx)
@@ -305,21 +318,27 @@ namespace argparse {
 		}
 
 		/**
-		 * Print help text to stdout.
+		 * Print usage text to stdout.
 		 */
-		void print_help() const {
+		void print_usage() const {
 			std::cout << "Usage: " << m_scriptname;
 			if (!m_optional_args.empty())
 				std::cout << " [options]";
 			for (const auto &positional : m_positional_order)
 				std::cout << " <" << positional << ">";
 			std::cout << std::endl;
+		}
 
+		/**
+		 * Print help text to stdout.
+		 */
+		void print_help() const {
+			print_usage();
 			if (!m_positional_order.empty()) {
 				std::cout << std::endl << "Positional arguments:" << std::endl;
 				for (const auto &positional : m_positional_order) {
 					std::cout << "  ";
-					std::cout << std::left << std::setw(18) << positional << "" << std::endl;
+					std::cout << std::left << std::setw(18) << positional << m_positional_args.at(positional).help_text << std::endl;
 				}
 			}
 			if (!m_optional_args.empty()) {
@@ -361,9 +380,17 @@ namespace argparse {
 		 */
 		static std::string str_to_upper(const std::string &str) {
 			std::string rtn;
-			std::transform(str.begin(), str.end(), rtn.begin(), toupper);
+			std::transform(str.begin(), str.end(), std::back_inserter(rtn), toupper);
 			return rtn;
 		}
+
+		/**
+		 * Positional info struct.
+		 */
+		struct Positional_Info {
+			std::string value;
+			std::string help_text;
+		};
 
 		/**
 		 * Optional info struct.
@@ -377,7 +404,7 @@ namespace argparse {
 
 		std::string m_scriptname;
 		std::vector<std::string> m_positional_order;
-		std::unordered_map<std::string, std::string> m_positional_args;
+		std::unordered_map<std::string, Positional_Info> m_positional_args;
 		std::vector<std::string> m_optional_order;
 		std::unordered_map<std::string, Optional_Info> m_optional_args;
 		std::unordered_map<char, std::string> m_flags;
@@ -482,7 +509,7 @@ namespace argparse {
 				const auto it = m_positional_args.find(name);
 				if (it == m_positional_args.cend())
 					throw std::logic_error{lerrstr("no argument by the name '", name, "'")};
-				value = it->second;
+				value = it->second.value;
 			}
 			return parse_string_arg<T>(name, value);
 		}
