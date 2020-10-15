@@ -1,13 +1,18 @@
-CC := g++
-CPPFLAGS := -I../include
-CXXFLAGS := -Wall -Wextra -std=c++11 -O3
+# 
+# Author: Matthew Rasa
+# E-mail: matt@raztech.com
+# GitHub: https://github.com/MatthewRasa
+#
 
-BDIR := bin
+ODIR := obj
 CDIR := src
+BDIR := bin
 
-$(BDIR)/sort-string: $(CDIR)/sort-string.cc
+include ../common.mk
+
+$(BDIR)/sort-string: $(OLIST)
 	@mkdir -p $(shell dirname $@)
 	$(CC) -o $@ $(CPPFLAGS) $(CXXFLAGS) $^
 
 clean:
-	@rm -rvf $(BDIR)
+	@rm -rvf $(BDIR) $(ODIR)

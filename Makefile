@@ -1,3 +1,9 @@
+# 
+# Author: Matthew Rasa
+# E-mail: matt@raztech.com
+# GitHub: https://github.com/MatthewRasa
+#
+
 .PHONY: all test example clean-test clean-example clean
 
 all: test example

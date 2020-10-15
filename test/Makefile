@@ -1,20 +1,17 @@
-CC := g++
-CPPFLAGS := -I../include
-CXXFLAGS := -Wall -Wextra -std=c++11 -O3
+# 
+# Author: Matthew Rasa
+# E-mail: matt@raztech.com
+# GitHub: https://github.com/MatthewRasa
+#
 
-APPNAME := unit-tests
 CDIR := src
 ODIR := obj
+APPNAME := unit-tests
 
-CLIST := $(shell find $(CDIR) -name "*.cc")
-OLIST := $(CLIST:$(CDIR)/%.cc=$(ODIR)/%.o)
+include ../common.mk
 
 $(APPNAME): $(OLIST)
 	$(CC) $^ -o $@
-
-$(ODIR)/%.o: $(CDIR)/%.cc
-	@mkdir -p $(shell dirname $@)
-	$(CC) $(CPPFLAGS) $(CXXFLAGS) -c $^ -o $@
 
 clean:
 	@rm -rvf $(ODIR) $(APPNAME)
