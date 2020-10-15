@@ -29,8 +29,8 @@ int main(int argc, char *argv[]) {
 
 		auto string_val = parser.arg<std::string>("string");
 
-		for (std::size_t i = 0; i < parser.arg_count("filter"); ++i)
-			string_val.erase(std::remove(string_val.begin(), string_val.end(), parser.arg_at<char>("filter", i)), string_val.end());
+		for (auto filter_char : parser.args<char>("filter"))
+			string_val.erase(std::remove(string_val.begin(), string_val.end(), filter_char), string_val.end());
 
 		if (parser.arg<bool>("invert"))
 			std::sort(string_val.rbegin(), string_val.rend());
