@@ -17,11 +17,11 @@ using Opt_Type = argparse::Argument_Parser::Optional_Type;
  */
 int main(int argc, char *argv[]) {
 	argparse::Argument_Parser parser;
-	parser.add_positional("string", "string to sort");
-	parser.add_optional("-i", "--invert", Opt_Type::FLAG, "invert sort to put string in reverse order");
-	parser.add_optional("-r", "--repeat", Opt_Type::SINGLE, "print REPEAT instances of the string [default: 1]");
-	parser.add_optional("-f", "--filter", Opt_Type::APPEND, "filter out the given character (may be specified more than once)");
-	parser.add_optional("--show-time", Opt_Type::FLAG, "display the time it took to complete the sort");
+	parser.add_positional("string").help("string to sort");
+	parser.add_optional("-i", "--invert", Opt_Type::FLAG).help("invert sort to put string in reverse order");
+	parser.add_optional("-r", "--repeat", Opt_Type::SINGLE).help("print REPEAT instances of the string [default: 1]");
+	parser.add_optional("-f", "--filter", Opt_Type::APPEND).help("filter out the given character (may be specified more than once)");
+	parser.add_optional("--show-time", Opt_Type::FLAG).help("display the time it took to complete the sort");
 	try {
 		parser.parse_args(argc, argv);
 
