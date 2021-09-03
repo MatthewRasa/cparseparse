@@ -21,3 +21,9 @@ clean-example:
 	$(MAKE) -C example clean
 
 clean: clean-test clean-example
+
+run-tests: test
+	./test/unit-tests
+
+run-valgrind-tests: test
+	valgrind ./test/unit-tests

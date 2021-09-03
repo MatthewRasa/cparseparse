@@ -9,7 +9,7 @@
 
 using namespace Catch::Matchers;
 
-using Opt_Type = argparse::Argument_Parser::Optional_Type;
+using Opt_Type = argparse::Optional_Type;
 
 TEST_CASE("Argument_Parser add_positional()") {
 	argparse::Argument_Parser parser;
@@ -127,11 +127,13 @@ TEST_CASE("Argument_Parser arg()") {
 			REQUIRE(parser.has_arg("flag"));
 			REQUIRE(parser.arg_count("flag") == 1);
 			REQUIRE(parser.arg<bool>("flag"));
+			REQUIRE(parser.arg<bool>("flag", false));
 			REQUIRE_THROWS_WITH(parser.arg_at<bool>("flag", 1), EndsWith("index 1 is out of range for 'flag'"));
 
 			REQUIRE(!parser.has_arg("other-flag"));
 			REQUIRE(parser.arg_count("other-flag") == 0);
 			REQUIRE(!parser.arg<bool>("other-flag"));
+			REQUIRE(parser.arg<bool>("other-flag", true));
 		}
 		SECTION("Single argument") {
 			REQUIRE(parser.has_arg("single"));

@@ -12,14 +12,356 @@
 #include <iostream>
 #include <limits>
 #include <regex>
+#include <sstream>
 #include <stdexcept>
 #include <string>
-#include <sstream>
 #include <type_traits>
-#include <vector>
 #include <unordered_map>
+#include <vector>
 
 namespace argparse {
+
+	std::string g_scriptname;
+
+#if __cplusplus >= 201402L
+	using std::make_unique;
+#elif __cplusplus >= 201103L
+	template<class T, class ...Args>
+	std::unique_ptr<T> make_unique(Args&&... args) {
+		return std::unique_ptr<T>(new T{std::forward<Args>(args)...});
+	}
+#else
+#error "Unsupported C++ standard; minimum supported standard is C++11"
+#endif
+
+	/**
+	 * Recursive helpers for errstr()/lerrstr().
+	 */
+	template<class Arg>
+	void _errstr(std::stringstream &ss, Arg &&arg) {
+		ss << std::forward<Arg>(arg);
+	}
+	template<class Arg, class ...Args>
+	void _errstr(std::stringstream &ss, Arg &&arg, Args&&... args) {
+		_errstr(ss, std::forward<Arg>(arg));
+		_errstr(ss, std::forward<Args>(args)...);
+	}
+
+	/**
+	 * Concatenate words into a logic error string.
+	 */
+	template<class ...Args>
+	std::string lerrstr(Args&&... args) {
+		std::stringstream ss;
+		_errstr(ss, "Argument_Parser: ", std::forward<Args>(args)...);
+		return ss.str();
+	}
+
+	/**
+	 * Concatenate words into a runtime error string.
+	 */
+	template<class ...Args>
+	std::string errstr(Args&&... args) {
+		std::stringstream ss;
+		_errstr(ss, g_scriptname, ": ", std::forward<Args>(args)...);
+		return ss.str();
+	}
+
+	/**
+	 * Optional argument type.
+	 *
+	 * FLAG    flag argument; arg() returns true when present or false
+	 *         otherwise.
+	 *
+	 * SINGLE  optional argument with a single value.
+	 *
+	 * APPEND  optional argument that can be specified multiple times, each time
+	 *         appending values to an argument list. Argument values can be
+	 *         retrieved with arg_at().
+	 */
+	enum class Optional_Type { FLAG, SINGLE, APPEND };
+
+	/**
+	 * Argument info object storing information about a generic argument.
+	 */
+	template<class Argument_Type>
+	class Argument_Info {
+	public:
+
+		/* Default virtual destructor */
+		virtual ~Argument_Info() = default;
+
+		/* Disable copy/move operations */
+		Argument_Info(const Argument_Info &) = delete;
+		Argument_Info(Argument_Info &&) = delete;
+		Argument_Info &operator=(const Argument_Info &) = delete;
+		Argument_Info &operator=(Argument_Info &&) = delete;
+
+		/**
+		 * @return the argument name
+		 */
+		const std::string &name() const noexcept {
+			return m_name;
+		}
+
+		/**
+		 * @return the argument help text
+		 */
+		const std::string &help() const noexcept {
+			return m_help_text;
+		}
+
+		/**
+		 * Set the help text that accompanies this argument when displaying program help.
+		 *
+		 * @tparam String    string-like type that is convertible to @a std::string
+		 * @param help_text  help text string
+		 * @return a reference to this object
+		 */
+		template<class String>
+		Argument_Type &help(String &&help_text) {
+			m_help_text = std::forward<String>(help_text);
+			return reinterpret_cast<Argument_Type &>(*this);
+		}
+
+		/**
+		 * Print argument description.
+		 *
+		 * @param text_width  text width spacing
+		 */
+		virtual void print(std::size_t text_width) const {
+			print_name(m_name, text_width);
+		}
+
+	protected:
+
+		std::string m_name;
+		std::string m_help_text;
+
+		/**
+		 * Construct argument info.
+		 *
+		 * @param name  argument name
+		 */
+		template<class String>
+		explicit Argument_Info(String &&name)
+				: m_name{std::forward<String>(name)} { }
+
+		/**
+		 * Print the argument using the specified name
+		 *
+		 * @param name        argument name
+		 * @param text_width  text_width spacing
+		 */
+		void print_name(const std::string &name, std::size_t text_width) const {
+			std::cout << "  " << std::left << std::setw(text_width - 2) << name << m_help_text << std::endl;
+		}
+
+		/**
+		 * Parse the string argument as type T.
+		 *
+		 * Valid choices for T are booleans, unsigned/signed integer types, floating point types, and std::string.
+		 */
+		template<class T>
+		typename std::enable_if<std::is_same<T, bool>::value, T>::type parse_string_arg(const std::string &value) const {
+			if (value == "true")
+				return true;
+			else if (value == "false")
+				return false;
+			throw std::runtime_error{errstr("'", m_name, "' must be either 'true' or 'false'")};
+		}
+		template<class T>
+		typename std::enable_if<std::is_same<T, char>::value, T>::type parse_string_arg(const std::string &value) const {
+			if (value.size() != 1)
+				throw std::runtime_error{errstr("'", m_name, "' must be a single character")};
+			return value[0];
+		}
+		template<class T>
+		typename std::enable_if<!std::is_same<T, bool>::value && std::is_integral<T>::value && std::is_unsigned<T>::value, T>::type parse_string_arg(const std::string &value) const {
+			return parse_numeric_arg<T>(value, [](const std::string &value) { return stoull(value); });
+		}
+		template<class T>
+		typename std::enable_if<!std::is_same<T, char>::value && std::is_integral<T>::value && std::is_signed<T>::value, T>::type parse_string_arg(const std::string &value) const {
+			return parse_numeric_arg<T>(value, [](const std::string &value) { return std::stoll(value); });
+		}
+		template<class T>
+		typename std::enable_if<std::is_floating_point<T>::value, T>::type parse_string_arg(const std::string &value) const {
+			return parse_numeric_arg<T>(value, [](const std::string &value) { return std::stold(value); });
+		}
+		template<class T>
+		typename std::enable_if<std::is_same<T, std::string>::value, T>::type parse_string_arg(const std::string &value) const {
+			return value;
+		}
+
+	private:
+
+		/**
+		 * std::stoull overload to prevent unsigned integer wrap-around.
+		 */
+		static unsigned long long stoull(const std::string &value) {
+			if (value.find('-') != std::string::npos)
+				throw std::out_of_range{""};
+			return std::stoull(value);
+		}
+
+		/**
+		 * Parse the string argument as a numeric of type T.
+		 */
+		template<class T, class Convert_Func>
+		T parse_numeric_arg(const std::string &value, Convert_Func &&convert_func) const {
+			try {
+				const auto n_value = convert_func(value);
+				if (n_value < std::numeric_limits<T>::lowest() || n_value > std::numeric_limits<T>::max())
+					throw std::out_of_range{""};
+				return n_value;
+			} catch (const std::invalid_argument &ex) {
+				throw std::runtime_error{errstr("'", m_name, "' must be of integral type")};
+			} catch (const std::out_of_range &ex) {
+				throw std::runtime_error{errstr("'", m_name, "' must be in range [", std::numeric_limits<T>::min(), ",", std::numeric_limits<T>::max(), "]")};
+			}
+		}
+
+	};
+
+	/**
+	 * Positional info object storing information about a positional argument.
+	 *
+	 * Provides functions for setting additional argument properties.
+	 */
+	class Positional_Info : public Argument_Info<Positional_Info> {
+	public:
+
+		template<class String>
+		explicit Positional_Info(String &&name)
+				: Argument_Info{std::forward<String>(name)} { }
+
+		template<class T>
+		T as_type() const {
+			return parse_string_arg<T>(m_value);
+		}
+
+	private:
+		friend class Argument_Parser;
+
+		std::string m_value;
+
+		/* Private functions for Argument_Parser */
+
+		template<class String>
+		void set_value(String &&value) {
+			m_value = std::forward<String>(value);
+		}
+
+	};
+
+	/**
+	 * Optional info object storing information about an optional argument.
+	 *
+	 * Provides functions for setting additional argument properties.
+	 */
+	class Optional_Info : public Argument_Info<Optional_Info> {
+	public:
+
+		template<class String>
+		explicit Optional_Info(String &&name, Optional_Type type) noexcept
+				: Argument_Info{std::forward<String>(name)},
+				  m_flag{0},
+				  m_type{type} { }
+
+		operator bool() const noexcept {
+			return exists();
+		}
+
+		std::size_t count() const noexcept {
+			return m_values.size();
+		}
+
+		bool exists() const noexcept {
+			return !m_values.empty();
+		}
+
+		template<class T>
+		T as_type() const {
+			return as_type_at<T>(0);
+		}
+
+		template<class T>
+		T as_type(T &&default_val) const {
+			return as_type_at<T>(0, std::forward<T>(default_val));
+		}
+
+		template<class T>
+		T as_type_at(std::size_t idx) const {
+			return as_type_at<T>(idx, false, T{});
+		}
+
+		template<class T>
+		T as_type_at(std::size_t idx, T &&default_val) const {
+			return as_type_at<T>(idx, true, std::forward<T>(default_val));
+		}
+
+		void print(std::size_t text_width) const override {
+			std::stringstream ss;
+			if (m_flag != 0)
+				ss << "-" << m_flag << ", ";
+			ss << "--" << m_name;
+			if (m_type != Optional_Type::FLAG)
+				ss << " " << str_to_upper(m_name);
+			print_name(ss.str(), text_width);
+		}
+
+	private:
+		friend class Argument_Parser;
+
+		/**
+		  * Convert string to all uppercase characters.
+		 */
+		static std::string str_to_upper(const std::string &str) {
+			std::string rtn;
+			std::transform(str.begin(), str.end(), std::back_inserter(rtn), toupper);
+			return rtn;
+		}
+
+		char m_flag;
+		Optional_Type m_type;
+		std::vector<std::string> m_values;
+
+		/* Private functions for Argument_Parser */
+
+		char flag() const noexcept {
+			return m_flag;
+		}
+
+		Optional_Type type() const noexcept {
+			return m_type;
+		}
+
+		template<class T>
+		T as_type_at(std::size_t idx, bool has_default, T &&default_val) const {
+			if (exists())
+				return parse_string_arg<T>(value(idx));
+			if (has_default)
+				return std::forward<T>(default_val);
+			if (m_type == Optional_Type::FLAG)
+				return parse_string_arg<T>("false");
+			throw std::logic_error{lerrstr("no value given for '", m_name, "' and no default specified")};
+		}
+
+		std::string value(std::size_t idx) const {
+			if (idx < m_values.size())
+				return m_values[idx];
+			throw std::out_of_range{lerrstr("index ", idx, " is out of range for '", m_name, "'")};
+		}
+
+		void set_flag(char flag) noexcept {
+			m_flag = flag;
+		}
+
+		void set_values(std::vector<std::string> &&values) {
+			m_values = std::move(values);
+		}
+
+	};
 
 	/**
 	 * Command-line argument parser.
@@ -31,96 +373,6 @@ namespace argparse {
 	 */
 	class Argument_Parser {
 	public:
-
-		/**
-		 * Optional argument type.
-		 *
-		 * FLAG    flag argument; arg() returns true when present or false
-		 *         otherwise.
-		 *
-		 * SINGLE  optional argument with a single value.
-		 *
-		 * APPEND  optional argument that can be specified multiple times, each time
-		 *         appending values to an argument list. Argument values can be
-		 *         retrieved with arg_at().
-		 */
-		enum class Optional_Type {
-			FLAG, SINGLE, APPEND
-		};
-
-		/**
-		 * Positional info object storing information about a positional argument.
-		 * Provides functions for setting additional argument properties.
-		 */
-		class Positional_Info {
-		public:
-
-			Positional_Info(const Positional_Info &) = delete;
-			Positional_Info(Positional_Info &&) = delete;
-			Positional_Info &operator=(const Positional_Info &) = delete;
-			Positional_Info &operator=(Positional_Info &&) = delete;
-
-			/**
-			 * Set the help text that accompanies this argument when displaying program help.
-			 *
-			 * @tparam String    string-like type that is convertible to @a std::string.
-			 * @param help_text  help text string.
-			 * @return a reference to this object.
-			 */
-			template<class String>
-			Positional_Info &help(String &&help_text) {
-				this->help_text = std::forward<String>(help_text);
-				return *this;
-			}
-
-		private:
-			friend class Argument_Parser;
-
-			Positional_Info() = default;
-
-			std::string help_text;
-			std::string value;
-		};
-
-		/**
-		 * Optional info object storing information about an optional argument.
-		 * Provides functions for setting additional argument properties.
-		 */
-		class Optional_Info {
-		public:
-
-			Optional_Info(const Optional_Info &) = delete;
-			Optional_Info(Optional_Info &&) = delete;
-			Optional_Info &operator=(const Optional_Info &) = delete;
-			Optional_Info &operator=(Optional_Info &&) = delete;
-
-			/**
-			 * Set the help text that accompanies this argument when displaying program help.
-			 *
-			 * @tparam String    string-like type that is convertible to @a std::string.
-			 * @param help_text  help text string.
-			 * @return a reference to this object.
-			 */
-			template<class String>
-			Optional_Info &help(String &&help_text) {
-				this->help_text = std::forward<String>(help_text);
-				return *this;
-			}
-
-		private:
-			friend class Argument_Parser;
-
-			Optional_Info(Optional_Type type, std::string name) noexcept
-					: flag{' '},
-					  type{type},
-					  name{std::move(name)} { }
-
-			char flag;
-			Optional_Type type;
-			std::string name;
-			std::vector<std::string> values;
-			std::string help_text;
-		};
 
 		Argument_Parser() {
 			add_optional("-h", "--help", Optional_Type::FLAG).help("display this help text");
@@ -140,18 +392,16 @@ namespace argparse {
 		 *                          duplicate, or it conflicts with an optional argument
 		 *                          name.
 		 */
-		template<class String>
-		Positional_Info &add_positional(String &&name) {
+		Positional_Info &add_positional(std::string name) {
 			if (!valid_positional_name(name))
 				throw std::logic_error{lerrstr("invalid positional argument name '", name, "'")};
-			if (m_positional_args.find(name) != m_positional_args.end())
-				throw std::logic_error{lerrstr("duplicate positional argument name '", name, "'")};
 			if (m_optional_args.find(name) != m_optional_args.end())
 				throw std::logic_error{lerrstr("positional argument name conflicts with optional argument reference name '", name, "'")};
-			auto it = m_positional_args.emplace(
-					std::forward<String>(name), std::unique_ptr<Positional_Info>{new Positional_Info{}}).first;
-			m_positional_order.push_back(it->first);
-			return *it->second;
+			const auto pair = m_positional_args.emplace(name, make_unique<Positional_Info>(name));
+			if (!pair.second)
+				throw std::logic_error{lerrstr("duplicate positional argument name '", name, "'")};
+			m_positional_order.push_back(std::move(name));
+			return *pair.first->second;
 		}
 
 		/**
@@ -174,14 +424,13 @@ namespace argparse {
 			auto formatted_name = format_option_name(long_name);
 			if (formatted_name.empty())
 				throw std::logic_error{lerrstr("invalid optional argument name: ", long_name)};
-			if (m_optional_args.find(formatted_name) != m_optional_args.end())
-				throw std::logic_error{lerrstr("duplicate optional argument name '", formatted_name, "'")};
 			if (m_positional_args.find(formatted_name) != m_positional_args.end())
 				throw std::logic_error{lerrstr("optional argument reference name conflicts with positional argument name '", formatted_name, "'")};
-			auto it = m_optional_args.emplace(formatted_name,
-					std::unique_ptr<Optional_Info>{new Optional_Info{type, formatted_name}}).first;
-			m_optional_order.push_back(it->second->name);
-			return *it->second;
+			const auto pair = m_optional_args.emplace(formatted_name, make_unique<Optional_Info>(formatted_name, type));
+			if (!pair.second)
+				throw std::logic_error{lerrstr("duplicate optional argument name '", formatted_name, "'")};
+			m_optional_order.push_back(std::move(formatted_name));
+			return *pair.first->second;
 		}
 
 		/**
@@ -205,13 +454,13 @@ namespace argparse {
 		template<class String>
 		Optional_Info &add_optional(std::string flag, String &&long_name, Optional_Type type = Optional_Type::SINGLE) {
 			const auto formatted_name = format_flag_name(flag);
-			if (formatted_name.empty())
+			if (!formatted_name)
 				throw std::logic_error{lerrstr("invalid flag name '", flag, "'")};
-			if (m_flags.find(formatted_name[0]) != m_flags.end())
+			if (m_flags.find(formatted_name) != m_flags.end())
 				throw std::logic_error{lerrstr("duplicate flag name '", flag, "'")};
 			auto &optional = add_optional(std::forward<String>(long_name), std::move(type));
-			optional.flag = formatted_name[0];
-			m_flags.emplace(optional.flag, optional.name).first;
+			optional.set_flag(formatted_name);
+			m_flags.emplace(optional.flag(), optional.name()).first;
 			return optional;
 		}
 
@@ -234,30 +483,19 @@ namespace argparse {
 			parse_args(argc, const_cast<char const **&>(argv));
 		}
 		void parse_args(int &argc, char const **&argv) {
-			m_scriptname = argv[0];
-
+			g_scriptname = argv[0];
 			std::vector<const char *> positional_args;
-			positional_args.reserve(argc - 1);
-			std::unordered_map<std::string, std::vector<std::string>> optional_values;
-
-			for (int argi = 1; argi < argc; ++argi) {
-				std::string string_arg{argv[argi]};
-				if (valid_option_name(string_arg))
-					argi = parse_optional_arg(optional_values, string_arg, argi, argc, argv);
-				else
-					positional_args.push_back(argv[argi]);
-			}
-			if (positional_args.size() < m_positional_order.size())
-				throw std::runtime_error{errstr("requires positional argument '", m_positional_order[positional_args.size()], "'")};
+			std::unordered_map<std::string, std::vector<std::string>> optional_args;
+			std::tie(positional_args, optional_args) = match_args(argc, argv);
 
 			std::size_t pos_idx;
 			for (pos_idx = 0; pos_idx < m_positional_order.size(); ++pos_idx)
-				m_positional_args[m_positional_order[pos_idx]]->value = positional_args[pos_idx];
-			for (const auto &pair : optional_values)
-				m_optional_args[pair.first]->values = std::move(pair.second);
+				m_positional_args[m_positional_order[pos_idx]]->set_value(std::move(positional_args[pos_idx]));
+			for (auto &&pair : std::move(optional_args))
+				m_optional_args[pair.first]->set_values(std::move(pair.second));
 
 			argc = positional_args.size() - pos_idx + 1;
-			for ( ; pos_idx < positional_args.size(); ++pos_idx)
+			for (; pos_idx < positional_args.size(); ++pos_idx)
 				argv[pos_idx - m_positional_order.size() + 1] = positional_args[pos_idx];
 		}
 
@@ -272,10 +510,7 @@ namespace argparse {
 		 *                          exists.
 		 */
 		bool has_arg(const std::string &name) const {
-			const auto opt_it = m_optional_args.find(name);
-			if (opt_it == m_optional_args.end())
-				throw std::logic_error{lerrstr("no optional argument by the name '", name, "'")};
-			return !opt_it->second->values.empty();
+			return lookup_optional(name).exists();
 		}
 
 		/**
@@ -409,17 +644,14 @@ namespace argparse {
 		 *                          exists.
 		 */
 		std::size_t arg_count(const std::string &name) const {
-			const auto opt_it = m_optional_args.find(name);
-			if (opt_it == m_optional_args.end())
-				throw std::logic_error{lerrstr("no optional argument by the name '", name, "'")};
-			return opt_it->second->values.size();
+			return lookup_optional(name).count();
 		}
 
 		/**
 		 * Print usage text to stdout.
 		 */
 		void print_usage() const {
-			std::cout << "Usage: " << m_scriptname;
+			std::cout << "Usage: " << g_scriptname;
 			if (!m_optional_args.empty())
 				std::cout << " [options]";
 			for (const auto &positional : m_positional_order)
@@ -434,24 +666,13 @@ namespace argparse {
 			print_usage();
 			if (!m_positional_order.empty()) {
 				std::cout << std::endl << "Positional arguments:" << std::endl;
-				for (const auto &positional : m_positional_order) {
-					std::cout << "  ";
-					std::cout << std::left << std::setw(18) << positional << m_positional_args.at(positional)->help_text << std::endl;
-				}
+				for (const auto &positional : m_positional_order)
+					m_positional_args.at(positional)->print(20);
 			}
 			if (!m_optional_args.empty()) {
 				std::cout << std::endl << "Options:" << std::endl;
-				for (const auto &optional : m_optional_order) {
-					const auto &info = m_optional_args.at(optional);
-					std::stringstream ss;
-					ss << "  ";
-					if (info->flag != ' ')
-						ss << "-" << info->flag << ", ";
-					ss << "--" << optional;
-					if (info->type != Optional_Type::FLAG)
-						ss << " " << str_to_upper(optional);
-					std::cout << std::left << std::setw(30) << ss.str() << info->help_text << std::endl;
-				}
+				for (const auto &optional : m_optional_order)
+					m_optional_args.at(optional)->print(30);
 			}
 		}
 
@@ -465,34 +686,9 @@ namespace argparse {
 		}
 
 		/**
-		 * std::stoull overload to prevent unsigned integer wrap-around.
-		 */
-		static unsigned long long stoull(const std::string &value) {
-			if (value.find('-') != std::string::npos)
-				throw std::out_of_range{""};
-			return std::stoull(value);
-		}
-
-		/**
-		 * Convert string to all uppercase characters.
-		 */
-		static std::string str_to_upper(const std::string &str) {
-			std::string rtn;
-			std::transform(str.begin(), str.end(), std::back_inserter(rtn), toupper);
-			return rtn;
-		}
-
-		std::string m_scriptname;
-		std::vector<std::string> m_positional_order;
-		std::unordered_map<std::string, std::unique_ptr<Positional_Info>> m_positional_args;
-		std::vector<std::string> m_optional_order;
-		std::unordered_map<std::string, std::unique_ptr<Optional_Info>> m_optional_args;
-		std::unordered_map<char, std::string> m_flags;
-
-		/**
 		 * Check whether the positional argument name is valid.
 		 */
-		bool valid_positional_name(const std::string &name) const {
+		static bool valid_positional_name(const std::string &name) {
 			std::cmatch m;
 			std::regex_match(name.c_str(), m, std::regex("\\w[a-zA-Z0-9_-]*"));
 			return !m.empty();
@@ -501,7 +697,7 @@ namespace argparse {
 		/**
 		 * Check whether the optional argument name is valid.
 		 */
-		bool valid_option_name(const std::string &name) {
+		static bool valid_option_name(const std::string &name) {
 			std::cmatch m;
 			std::regex_match(name.c_str(), m, std::regex("-([a-zA-Z_]|-?[a-zA-Z_][a-zA-Z0-9_-]+)"));
 			return !m.empty();
@@ -510,7 +706,7 @@ namespace argparse {
 		/**
 		 * Format the option name by removing the any leading '-' characters.
 		 */
-		std::string format_option_name(const std::string &name) const {
+		static std::string format_option_name(const std::string &name) {
 			std::cmatch m;
 			std::regex_match(name.c_str(), m, std::regex("--?([a-zA-Z_][a-zA-Z0-9_-]+)"));
 			return m.size() < 2 ? "" : m[1].str();
@@ -519,52 +715,141 @@ namespace argparse {
 		/**
 		 * Format the flag name by removing the leading '-' character.
 		 */
-		std::string format_flag_name(const std::string &name) const {
+		static char format_flag_name(const std::string &name) {
 			std::cmatch m;
 			std::regex_match(name.c_str(), m, std::regex("-([a-zA-Z_])"));
-			return m.size() < 2 ? "" : m[1].str();
+			return m.size() < 2 ? 0 : m[1].str()[0];
+		}
+
+		struct Arg_Info {
+			const char *arg;
+			std::string option_name;
+			std::string option_value;
+		};
+
+		struct Counter {
+			bool operator==(std::size_t val) const noexcept {
+				return m_val == val;
+			}
+			bool operator!=(std::size_t val) const noexcept {
+				return !(*this == val);
+			}
+			bool operator<(std::size_t val) const noexcept {
+				return m_val < val;
+			}
+			bool operator<=(std::size_t val) const noexcept {
+				return m_val <= val;
+			}
+			bool operator>(std::size_t val) const noexcept {
+				return !(*this <= val);
+			}
+			bool operator>=(std::size_t val) const noexcept {
+				return !(*this < val);
+			}
+			Counter &operator++() noexcept {
+				++m_val;
+				return *this;
+			}
+			std::size_t operator*() const noexcept {
+				return m_val;
+			}
+			std::size_t m_val{0};
+		};
+
+		std::vector<std::string> m_positional_order;
+		std::unordered_map<std::string, std::unique_ptr<Positional_Info>> m_positional_args;
+		std::vector<std::string> m_optional_order;
+		std::unordered_map<std::string, std::unique_ptr<Optional_Info>> m_optional_args;
+		std::unordered_map<char, std::string> m_flags;
+
+		/**
+		 * Attempt to parse the user-provided command-line arguments.
+		 *
+		 * @param argc  command-line argument count
+		 * @param argv  command-line argument strings
+		 * @return the parsed positional and optional argument values.
+		 * @throw std::runtime_error  If a positional argument is missing, a value for
+		 *                            an optional argument is missing, or an optional
+		 *                            argument value was supplied an incorrect number of
+		 *                            times.
+		 */
+		std::pair<std::vector<const char *>, std::unordered_map<std::string, std::vector<std::string>>> match_args(
+				int argc, const char **argv) const {
+			std::vector<const char *> positional_args;
+			std::unordered_map<std::string, std::vector<std::string>> optional_args;
+			for (auto &&arg_info : prematch_args(argc, argv, positional_args, optional_args)) {
+				if (arg_info.option_name.empty())
+					positional_args.push_back(std::move(arg_info.arg));
+				else
+					optional_args[arg_info.option_name].push_back(std::move(arg_info.option_value));
+			}
+			return std::make_pair(std::move(positional_args), std::move(optional_args));
+		}
+
+		std::vector<Arg_Info> prematch_args(int argc, const char **argv,
+				std::vector<const char *> &positional_args,
+				std::unordered_map<std::string, std::vector<std::string>> &optional_args) const {
+			std::vector<Arg_Info> arg_infos;
+			arg_infos.reserve(argc - 1);
+			std::size_t positional_count = 0;
+			std::unordered_map<std::string, Counter> optional_occurs;
+			for (int argi = 1; argi < argc; ++argi) {
+				Arg_Info arg_info;
+				arg_info.arg = argv[argi];
+				arg_info.option_name = lookup_formatted_option_name(arg_info.arg);
+				if (arg_info.option_name.empty())
+					++positional_count;
+				else
+					arg_info.option_value = prematch_optional_arg(arg_info.option_name,
+							++optional_occurs[arg_info.option_name] > 1, argi, argc, argv);
+				arg_infos.push_back(std::move(arg_info));
+			}
+			if (positional_count < m_positional_order.size())
+				throw std::runtime_error{errstr("requires positional argument '", m_positional_order[positional_count], "'")};
+
+			positional_args.reserve(positional_count);
+			for (const auto &pair : optional_occurs)
+				optional_args[pair.first].reserve(*pair.second);
+			return arg_infos;
 		}
 
 		/**
 		 * Parse optional argument from the list of user-provided arguments.
 		 */
-		std::size_t parse_optional_arg(std::unordered_map<std::string, std::vector<std::string>> &optional_values,
-				const std::string &option_name, int argi, int argc, char const **argv) {
-			const auto formatted_option_name = lookup_formatted_option_name(option_name);
-			if (formatted_option_name == "help") {
+		std::string prematch_optional_arg(const std::string &option_name, bool repeated, int &argi, int argc, const char **argv) const {
+			if (option_name == "help") {
 				print_help();
 				std::exit(0);
 			}
 
-			auto it = m_optional_args.find(formatted_option_name);
+			auto it = m_optional_args.find(option_name);
 			if (it == m_optional_args.end())
 				throw std::runtime_error{errstr("invalid option '", option_name, "', pass --help to display possible options")};
-			auto &values = optional_values[formatted_option_name];
-			if (it->second->type == Optional_Type::FLAG) {
-				if (!values.empty())
+
+			if (it->second->type() == Optional_Type::FLAG) {
+				if (repeated)
 					throw std::runtime_error{errstr("'", option_name, "' should only be specified once")};
-				values.push_back("true");
+				return "true";
 			} else {
 				if (++argi == argc)
 					throw std::runtime_error{errstr("'", option_name, "' requires a value")};
-				std::string string_val{argv[argi]};
-				if (valid_option_name(string_val))
+				std::string string_arg{argv[argi]};
+				if (valid_option_name(string_arg))
 					throw std::runtime_error{errstr("'", option_name, "' requires a value")};
-				if (it->second->type != Optional_Type::APPEND && !values.empty())
+				if (it->second->type() != Optional_Type::APPEND && repeated)
 					throw std::runtime_error{errstr("'", option_name, "' should only be specified once")};
-				values.push_back(std::move(string_val));
+				return string_arg;
 			}
-			return argi;
 		}
 
 		/**
-		 * Look up the option name as either a flag or option argument and
-		 * return the formatted option name.
+		 * Look up the option name as either a flag or option argument and return the
+		 * formatted option name.
 		 */
 		std::string lookup_formatted_option_name(const std::string &option_name) const {
 			const auto flag_name = format_flag_name(option_name);
-			if (!flag_name.empty()) {
-				const auto flag_it = m_flags.find(flag_name[0]);
+			if (flag_name) {
+				const auto flag_it = m_flags.find(flag_name);
 				if (flag_it == m_flags.end())
 					throw std::runtime_error{errstr("invalid flag '", option_name, "', pass --help to display possible options")};
 				return flag_it->second;
@@ -573,136 +858,31 @@ namespace argparse {
 		}
 
 		/**
-		 * Retrieve the value for the argument at the specified index with the
-		 * given default value.
+		 * Retrieve the value for the argument at the specified index with the given
+		 * default value.
 		 */
 		template<class T>
 		T arg_at(const std::string &name, std::size_t idx, bool has_default, T &&default_val) const {
-			std::string value;
 			const auto opt_it = m_optional_args.find(name);
-			if (opt_it != m_optional_args.cend()) {
-				if ((value = optional_arg(opt_it, idx)).empty()) {
-					if (!has_default)
-						throw std::logic_error{lerrstr("no value given for '", name, "' and no default specified")};
-					return default_val;
-				}
-			} else {
-				const auto it = m_positional_args.find(name);
-				if (it == m_positional_args.cend())
-					throw std::logic_error{lerrstr("no argument by the name '", name, "'")};
-				value = it->second->value;
-			}
-			return parse_string_arg<T>(name, value);
+			if (opt_it != m_optional_args.cend())
+				return opt_it->second->as_type_at<T>(idx, has_default, std::forward<T>(default_val));
+
+			const auto pos_it = m_positional_args.find(name);
+			if (pos_it != m_positional_args.cend())
+				return pos_it->second->as_type<T>();
+
+			throw std::logic_error{lerrstr("no argument by the name '", name, "'")};
 		}
 
-		/**
-		 * Retrieve the value of the (possibly) user-supplied optional argument.
-		 */
-		std::string optional_arg(decltype(m_optional_args)::const_iterator it, std::size_t idx) const {
-			if (idx < it->second->values.size())
-				return it->second->values[idx];
-			else if (it->second->values.empty())
-				return it->second->type == Optional_Type::FLAG ? "false" : "";
-			else
-				throw std::out_of_range{lerrstr("index ", idx, " is out of range for '", it->first, "'")};
+		const Optional_Info &lookup_optional(const std::string &name) const {
+			const auto opt_it = m_optional_args.find(name);
+			if (opt_it == m_optional_args.end())
+				throw std::logic_error{lerrstr("no optional argument by the name '", name, "'")};
+			return *opt_it->second;
 		}
 
-		/**
-		 * Parse the string argument as type T.
-		 *
-		 * Valid choices for T are booleans, unsigned/signed integer types, floating point types, and std::string.
-		 */
-		template<class T>
-		typename std::enable_if<std::is_same<T, bool>::value, T>::type parse_string_arg(const std::string &name, const std::string &value) const {
-			if (value == "true")
-				return true;
-			else if (value == "false")
-				return false;
-			throw std::runtime_error{errstr("'", name, "' must be either 'true' or 'false'")};
-		}
-		template<class T>
-		typename std::enable_if<std::is_same<T, char>::value, T>::type parse_string_arg(const std::string &name, const std::string &value) const {
-			if (value.size() != 1)
-				throw std::runtime_error{errstr("'", name, "' must be a single character")};
-			return value[0];
-		}
-		template<class T>
-		typename std::enable_if<!std::is_same<T, bool>::value && std::is_integral<T>::value && std::is_unsigned<T>::value, T>::type parse_string_arg(const std::string &name, const std::string &value) const {
-			return parse_numeric_arg<T>(name, value, [](const std::string &value) { return stoull(value); });
-		}
-		template<class T>
-		typename std::enable_if<!std::is_same<T, char>::value && std::is_integral<T>::value && std::is_signed<T>::value, T>::type parse_string_arg(const std::string &name, const std::string &value) const {
-			return parse_numeric_arg<T>(name, value, [](const std::string &value) { return std::stoll(value); });
-		}
-		template<class T>
-		typename std::enable_if<std::is_floating_point<T>::value, T>::type parse_string_arg(const std::string &name, const std::string &value) const {
-			return parse_numeric_arg<T>(name, value, [](const std::string &value) { return std::stold(value); });
-		}
-		template<class T>
-		typename std::enable_if<std::is_same<T, std::string>::value, T>::type parse_string_arg(const std::string &, const std::string &value) const {
-			return value;
-		}
-
-		/**
-		 * Parse the string argument as a numeric of type T.
-		 */
-		template<class T, class Convert_Func>
-		T parse_numeric_arg(const std::string &name, const std::string &value, Convert_Func &&convert_func) const {
-			try {
-				const auto n_value = convert_func(value);
-				if (n_value < std::numeric_limits<T>::lowest() || n_value > std::numeric_limits<T>::max())
-					throw std::out_of_range{""};
-				return n_value;
-			} catch (const std::invalid_argument &ex) {
-				throw std::runtime_error{errstr("'", name, "' must be of integral type")};
-			} catch (const std::out_of_range &ex) {
-				throw std::runtime_error{errstr("'", name, "' must be in range [", std::numeric_limits<T>::min(), ",", std::numeric_limits<T>::max(), "]")};
-			}
-		}
-
-		/**
-		 * Convert the argument of type T to std::string.
-		 */
-		template<class T>
-		typename std::enable_if<std::is_convertible<T, std::string>::value, std::string>::type arg_to_string(T &&arg) const {
-			return arg;
-		}
-		template<class T>
-		typename std::enable_if<!std::is_convertible<T, std::string>::value, std::string>::type arg_to_string(T &&arg) const {
-			return std::to_string(arg);
-		}
-
-		/**
-		 * Concatenate words into a runtime error string.
-		 */
-		template<class ...Args>
-		std::string errstr(Args&&... args) const {
-			std::stringstream ss;
-			_errstr(ss, m_scriptname, ": ", std::forward<Args>(args)...);
-			return ss.str();
-		}
-
-		/**
-		 * Concatenate words into a logic error string.
-		 */
-		template<class ...Args>
-		std::string lerrstr(Args&&... args) const {
-			std::stringstream ss;
-			_errstr(ss, "Argument_Parser: ", std::forward<Args>(args)...);
-			return ss.str();
-		}
-
-		/**
-		 * Recursive helpers for errstr()/lerrstr().
-		 */
-		template<class Arg, class ...Args>
-		void _errstr(std::stringstream &ss, Arg &&arg, Args&&... args) const {
-			_errstr(ss, std::forward<Arg>(arg));
-			_errstr(ss, std::forward<Args>(args)...);
-		}
-		template<class Arg>
-		void _errstr(std::stringstream &ss, Arg &&arg) const {
-			ss << std::forward<Arg>(arg);
+		Optional_Info &lookup_optional(const std::string &name) {
+			return const_cast<Optional_Info &>(static_cast<const Argument_Parser *>(this)->lookup_optional(name));
 		}
 
 	};

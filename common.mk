@@ -4,10 +4,13 @@
 # GitHub: https://github.com/MatthewRasa
 #
 
+# Build options
+BUILD := release
+STD := c++11
+
 CC := g++
 CPPFLAGS := -I../include
-CXXFLAGS := -Wall -Wextra -std=c++11
-BUILD := release
+CXXFLAGS := -Wall -Wextra -std=$(STD)
 
 ifeq ($(BUILD),debug)
 CXXFLAGS += -O0 -g
