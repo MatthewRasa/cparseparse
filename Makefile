@@ -4,6 +4,8 @@
 # GitHub: https://github.com/MatthewRasa
 #
 
+PREFIX := /usr/local
+
 .PHONY: all test example clean-test clean-example clean
 
 all: test example
@@ -21,6 +23,14 @@ clean-example:
 	$(MAKE) -C example clean
 
 clean: clean-test clean-example
+
+install:
+	@for path in $(shell find include/cpparse -type f); do \
+		install -v -D $$path $(PREFIX)/$$path; \
+	done
+
+uninstall:
+	@rm -rvf $(PREFIX)/include/cpparse
 
 run-tests: test
 	./test/unit-tests
