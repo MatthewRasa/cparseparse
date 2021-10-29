@@ -4,15 +4,15 @@
  * GitHub: https://github.com/MatthewRasa
  */
 
-#include "argument-parser.h"
+#include "cpparse/argument-parser.h"
 #include <catch2/catch.hpp>
 
 using namespace Catch::Matchers;
 
-using Opt_Type = argparse::Optional_Type;
+using Opt_Type = cpparse::Optional_Info::Type;
 
 TEST_CASE("Argument_Parser add_positional()") {
-	argparse::Argument_Parser parser;
+	cpparse::Argument_Parser parser;
 	parser.add_positional("pos0");
 	parser.add_positional("pos1");
 	parser.add_optional("--opt0");
@@ -22,7 +22,7 @@ TEST_CASE("Argument_Parser add_positional()") {
 }
 
 TEST_CASE("Argument_Parser add_optional()") {
-	argparse::Argument_Parser parser;
+	cpparse::Argument_Parser parser;
 	parser.add_positional("pos0");
 	REQUIRE_THROWS_WITH(parser.add_optional("opt1", Opt_Type::SINGLE), Contains("invalid optional argument name"));
 	REQUIRE_THROWS_WITH(parser.add_optional("a", "opt1", Opt_Type::SINGLE), Contains("invalid flag name"));
@@ -37,7 +37,7 @@ TEST_CASE("Argument_Parser add_optional()") {
 }
 
 TEST_CASE("Argument_Parser parse_args()") {
-	argparse::Argument_Parser parser;
+	cpparse::Argument_Parser parser;
 	auto call_parse_args = [&parser](std::vector<const char *> args) {
 		int argc = args.size();
 		auto argv = args.data();
@@ -98,7 +98,7 @@ TEST_CASE("Argument_Parser parse_args()") {
 }
 
 TEST_CASE("Argument_Parser arg()") {
-	argparse::Argument_Parser parser;
+	cpparse::Argument_Parser parser;
 	parser.add_positional("barg");
 	parser.add_positional("carg");
 	parser.add_positional("uiarg");

@@ -4,14 +4,14 @@
  * GitHub: https://github.com/MatthewRasa
  */
 
-#include "argument-parser.h"
+#include "cpparse/argument-parser.h"
 #include <chrono>
 #include <functional>
 #include <iostream>
 #include <string>
 
 /** Optional argument type alias */
-using Opt_Type = argparse::Optional_Type;
+using Opt_Type = cpparse::Optional_Info::Type;
 
 /**
  * Example program to perform a string sort with a variety of options.
@@ -44,7 +44,7 @@ void run_program(std::string string_val, bool invert, unsigned int repeat, const
  */
 int main(int argc, char *argv[]) {
 	// Define command-line parameters
-	argparse::Argument_Parser parser;
+	cpparse::Argument_Parser parser;
 	parser.add_positional("string").help("string to sort");
 	parser.add_optional("-i", "--invert", Opt_Type::FLAG).help("invert sort to put string in reverse order");
 	parser.add_optional("-r", "--repeat", Opt_Type::SINGLE).help("print REPEAT instances of the string [default: 1]");
