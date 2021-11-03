@@ -20,8 +20,13 @@ namespace cpparse {
 	}
 #else
 #error "Unsupported C++ standard; minimum supported standard is C++11"
-#endif
+#endif /* __cplusplus >= 201402L */
 
+#if __cplusplus >= 201703L
+#define IF_CONSTEXPR if constexpr
+#else
+#define IF_CONSTEXPR if
+#endif /* __cplusplus >= 201703L */
 }
 
 #endif /* CPPARSE_UTIL_COMPAT_H_ */

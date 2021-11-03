@@ -8,6 +8,7 @@
 #define CPPARSE_ARGUMENT_INFO_H_
 
 #include "cpparse/util/errstr.h"
+#include "cpparse/util/string-ops.h"
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -22,7 +23,18 @@ namespace cpparse {
 	class Argument_Info {
 	public:
 
-		/* Default virtual destructor */
+		/**
+		 * Construct argument info.
+		 *
+		 * @param name  argument name
+		 */
+		template<class String>
+		explicit Argument_Info(String &&name) noexcept(std::is_nothrow_constructible<std::string, String &&>::value)
+				: m_name{std::forward<String>(name)} { }
+
+		/**
+		 * Default virtual destructor.
+		 */
 		virtual ~Argument_Info() = default;
 
 		/* Disable copy/move operations */
@@ -53,18 +65,9 @@ namespace cpparse {
 		 * @return a reference to this object
 		 */
 		template<class String>
-		Argument_Type &help(String &&help_text) {
+		Argument_Type &help(String &&help_text) noexcept(std::is_nothrow_assignable<std::string, String &&>::value) {
 			m_help_text = std::forward<String>(help_text);
 			return reinterpret_cast<Argument_Type &>(*this);
-		}
-
-		/**
-		 * Print argument description.
-		 *
-		 * @param text_width  text width spacing
-		 */
-		virtual void print(std::size_t text_width) const {
-			print_name(m_name, text_width);
 		}
 
 	protected:
@@ -73,70 +76,65 @@ namespace cpparse {
 		std::string m_help_text;
 
 		/**
-		 * Construct argument info.
+		 * Print the argument name and help text.
 		 *
-		 * @param name  argument name
+		 * @param text_width  text width spacing
 		 */
-		template<class String>
-		explicit Argument_Info(String &&name)
-				: m_name{std::forward<String>(name)} { }
+		void print_help(std::size_t text_width) const {
+			print_help(m_name, text_width);
+		}
 
 		/**
-		 * Print the argument using the specified name
+		 * Print the argument name and help text.
 		 *
 		 * @param name        argument name
-		 * @param text_width  text_width spacing
+		 * @param text_width  text width spacing
 		 */
-		void print_name(const std::string &name, std::size_t text_width) const {
+		void print_help(const std::string &name, std::size_t text_width) const {
 			std::cout << "  " << std::left << std::setw(text_width - 2) << name << m_help_text << std::endl;
 		}
 
 		/**
-		 * Parse the string argument as type T.
+		 * Parse the argument as type T.
 		 *
 		 * Valid choices for T are booleans, unsigned/signed integer types, floating point types, and std::string.
+		 *
+		 * @tparam T     type to parse the argument as
+		 * @param value  the argument value as a string
+		 * @return the argument parsed as type T
 		 */
 		template<class T>
-		typename std::enable_if<std::is_same<T, bool>::value, T>::type parse_string_arg(const std::string &value) const {
-			if (value == "true")
+		typename std::enable_if<std::is_same<T, bool>::value, T>::type parse_as_type(const std::string &value) const {
+			if (value == "true" || value == "yes" || value == "on")
 				return true;
-			else if (value == "false")
+			else if (value == "false" || value == "no" || value == "off")
 				return false;
-			throw std::runtime_error{errstr("'", m_name, "' must be either 'true' or 'false'")};
+			throw std::runtime_error{errstr("'", m_name, "' must be one of: 'true', 'false', 'yes', 'no', 'on', 'off'")};
 		}
 		template<class T>
-		typename std::enable_if<std::is_same<T, char>::value, T>::type parse_string_arg(const std::string &value) const {
+		typename std::enable_if<std::is_same<T, char>::value, T>::type parse_as_type(const std::string &value) const {
 			if (value.size() != 1)
 				throw std::runtime_error{errstr("'", m_name, "' must be a single character")};
 			return value[0];
 		}
 		template<class T>
-		typename std::enable_if<!std::is_same<T, bool>::value && std::is_integral<T>::value && std::is_unsigned<T>::value, T>::type parse_string_arg(const std::string &value) const {
-			return parse_numeric_arg<T>(value, [](const std::string &value) { return stoull(value); });
+		typename std::enable_if<!std::is_same<T, bool>::value && std::is_integral<T>::value && std::is_unsigned<T>::value, T>::type parse_as_type(const std::string &value) const {
+			return parse_numeric_arg<T>(value, [](const std::string &value) { return cpparse::stoull(value); });
 		}
 		template<class T>
-		typename std::enable_if<!std::is_same<T, char>::value && std::is_integral<T>::value && std::is_signed<T>::value, T>::type parse_string_arg(const std::string &value) const {
+		typename std::enable_if<!std::is_same<T, char>::value && std::is_integral<T>::value && std::is_signed<T>::value, T>::type parse_as_type(const std::string &value) const {
 			return parse_numeric_arg<T>(value, [](const std::string &value) { return std::stoll(value); });
 		}
 		template<class T>
-		typename std::enable_if<std::is_floating_point<T>::value, T>::type parse_string_arg(const std::string &value) const {
+		typename std::enable_if<std::is_floating_point<T>::value, T>::type parse_as_type(const std::string &value) const {
 			return parse_numeric_arg<T>(value, [](const std::string &value) { return std::stold(value); });
 		}
 		template<class T>
-		typename std::enable_if<std::is_same<T, std::string>::value, T>::type parse_string_arg(const std::string &value) const {
+		typename std::enable_if<std::is_same<T, std::string>::value, T>::type parse_as_type(std::string value) const noexcept {
 			return value;
 		}
 
 	private:
-
-		/**
-		 * std::stoull overload to prevent unsigned integer wrap-around.
-		 */
-		static unsigned long long stoull(const std::string &value) {
-			if (value.find('-') != std::string::npos)
-				throw std::out_of_range{""};
-			return std::stoull(value);
-		}
 
 		/**
 		 * Parse the string argument as a numeric of type T.

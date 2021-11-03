@@ -170,35 +170,35 @@ TEST_CASE("Argument_Parser arg()") {
 		REQUIRE_THROWS_WITH(parser.arg<double>("barg"), EndsWith("must be of integral type"));
 		REQUIRE(parser.arg<std::string>("barg") == "true");
 
-		REQUIRE_THROWS_WITH(parser.arg<bool>("carg"), EndsWith("must be either 'true' or 'false'"));
+		REQUIRE_THROWS_WITH(parser.arg<bool>("carg"), EndsWith("must be one of: 'true', 'false', 'yes', 'no', 'on', 'off'"));
 		REQUIRE(parser.arg<char>("carg") == 'r');
 		REQUIRE_THROWS_WITH(parser.arg<uint>("carg"), EndsWith("must be of integral type"));
 		REQUIRE_THROWS_WITH(parser.arg<int>("carg"), EndsWith("must be of integral type"));
 		REQUIRE_THROWS_WITH(parser.arg<double>("carg"), EndsWith("must be of integral type"));
 		REQUIRE(parser.arg<std::string>("carg") == "r");
 
-		REQUIRE_THROWS_WITH(parser.arg<bool>("uiarg"), EndsWith("must be either 'true' or 'false'"));
+		REQUIRE_THROWS_WITH(parser.arg<bool>("uiarg"), EndsWith("must be one of: 'true', 'false', 'yes', 'no', 'on', 'off'"));
 		REQUIRE_THROWS_WITH(parser.arg<char>("uiarg"), EndsWith("must be a single character"));
 		REQUIRE(parser.arg<uint>("uiarg") == 77);
 		REQUIRE(parser.arg<int>("uiarg") == 77);
 		REQUIRE(parser.arg<double>("uiarg") == 77);
 		REQUIRE(parser.arg<std::string>("uiarg") == "77");
 
-		REQUIRE_THROWS_WITH(parser.arg<bool>("siarg"), EndsWith("must be either 'true' or 'false'"));
+		REQUIRE_THROWS_WITH(parser.arg<bool>("siarg"), EndsWith("must be one of: 'true', 'false', 'yes', 'no', 'on', 'off'"));
 		REQUIRE_THROWS_WITH(parser.arg<char>("siarg"), EndsWith("must be a single character"));
 		REQUIRE_THROWS_WITH(parser.arg<uint>("siarg"), Contains("must be in range"));
 		REQUIRE(parser.arg<int>("siarg") == -5);
 		REQUIRE(parser.arg<double>("siarg") == -5);
 		REQUIRE(parser.arg<std::string>("siarg") == "-5");
 
-		REQUIRE_THROWS_WITH(parser.arg<bool>("darg"), EndsWith("must be either 'true' or 'false'"));
+		REQUIRE_THROWS_WITH(parser.arg<bool>("darg"), EndsWith("must be one of: 'true', 'false', 'yes', 'no', 'on', 'off'"));
 		REQUIRE_THROWS_WITH(parser.arg<char>("darg"), EndsWith("must be a single character"));
 		REQUIRE_THROWS_WITH(parser.arg<uint>("darg"), Contains("must be in range"));
 		REQUIRE(parser.arg<int>("darg") == -9);
 		REQUIRE(parser.arg<double>("darg") == -9.5);
 		REQUIRE(parser.arg<std::string>("darg") == "-9.5");
 
-		REQUIRE_THROWS_WITH(parser.arg<bool>("sarg"), EndsWith("must be either 'true' or 'false'"));
+		REQUIRE_THROWS_WITH(parser.arg<bool>("sarg"), EndsWith("must be one of: 'true', 'false', 'yes', 'no', 'on', 'off'"));
 		REQUIRE_THROWS_WITH(parser.arg<char>("sarg"), EndsWith("must be a single character"));
 		REQUIRE_THROWS_WITH(parser.arg<uint>("sarg"), EndsWith("must be of integral type"));
 		REQUIRE_THROWS_WITH(parser.arg<int>("sarg"), EndsWith("must be of integral type"));

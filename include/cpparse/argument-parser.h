@@ -257,7 +257,7 @@ namespace cpparse {
 		 */
 		template<class T>
 		T arg_at(const std::string &name, std::size_t idx) const {
-			return arg_at<T>(name, idx, false, T{});
+			return arg_at<T, false>(name, idx, T{});
 		}
 
 		/**
@@ -283,7 +283,7 @@ namespace cpparse {
 		 */
 		template<class T>
 		T arg_at(const std::string &name, std::size_t idx, T &&default_val) const {
-			return arg_at<T>(name, idx, true, std::forward<T>(default_val));
+			return arg_at<T, true>(name, idx, std::forward<T>(default_val));
 		}
 
 		/**
@@ -513,11 +513,11 @@ namespace cpparse {
 		 * Retrieve the value for the argument at the specified index with the given
 		 * default value.
 		 */
-		template<class T>
-		T arg_at(const std::string &name, std::size_t idx, bool has_default, T &&default_val) const {
+		template<class T, bool has_default>
+		T arg_at(const std::string &name, std::size_t idx, T &&default_val) const {
 			const auto opt_it = m_optional_args.find(name);
 			if (opt_it != m_optional_args.cend())
-				return opt_it->second->as_type_at<T>(idx, has_default, std::forward<T>(default_val));
+				return opt_it->second->as_type_at<T, has_default>(idx, std::forward<T>(default_val));
 
 			const auto pos_it = m_positional_args.find(name);
 			if (pos_it != m_positional_args.cend())
