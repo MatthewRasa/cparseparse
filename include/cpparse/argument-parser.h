@@ -12,6 +12,7 @@
 #include "cpparse/util/compat.h"
 #include <regex>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace cpparse {
 
@@ -121,7 +122,7 @@ namespace cpparse {
 		 * program arguments.
 		 *
 		 * This function must be called before arg() or arg_at() can be used to retrieve
-		 * the values. After the call, argc and argv are updated to refer to any
+		 * the values. After the call, @a argc and @a argv are updated to refer to any
 		 * remaining command-line arguments not matched by the registered arguments.
 		 *
 		 * @param argc  reference to command-line argument count
@@ -132,23 +133,15 @@ namespace cpparse {
 		 *                            times.
 		 */
 		void parse_args(int &argc, char **&argv) {
-			parse_args(argc, const_cast<char const **&>(argv));
+			parse_args(argc, const_cast<const char **&>(argv));
 		}
-		void parse_args(int &argc, char const **&argv) {
+
+		/**
+		 * @see parse_args()
+		 */
+		void parse_args(int &argc, const char **&argv) {
 			errstr_set_script_name(argv[0]);
-			std::vector<const char *> positional_args;
-			std::unordered_map<std::string, std::vector<std::string>> optional_args;
-			std::tie(positional_args, optional_args) = match_args(argc, argv);
-
-			std::size_t pos_idx;
-			for (pos_idx = 0; pos_idx < m_positional_order.size(); ++pos_idx)
-				m_positional_args[m_positional_order[pos_idx]]->set_value(std::move(positional_args[pos_idx]));
-			for (auto &&pair : std::move(optional_args))
-				m_optional_args[pair.first]->set_values(std::move(pair.second));
-
-			argc = positional_args.size() - pos_idx + 1;
-			for (; pos_idx < positional_args.size(); ++pos_idx)
-				argv[pos_idx - m_positional_order.size() + 1] = positional_args[pos_idx];
+			remove_matched(assign_user_args(argc, argv), argc, argv);
 		}
 
 		/**
@@ -373,40 +366,17 @@ namespace cpparse {
 			return m.size() < 2 ? 0 : m[1].str()[0];
 		}
 
-		struct Arg_Info {
-			const char *arg;
-			std::string option_name;
-			std::string option_value;
+		/**
+		 * Parsed argument token structure.
+		 */
+		struct Opt_Token {
+			enum class Type { OPT_NAME, OPT_VAL, FLAG };
+			Type type;
+			std::string value;
 		};
 
-		struct Counter {
-			bool operator==(std::size_t val) const noexcept {
-				return m_val == val;
-			}
-			bool operator!=(std::size_t val) const noexcept {
-				return !(*this == val);
-			}
-			bool operator<(std::size_t val) const noexcept {
-				return m_val < val;
-			}
-			bool operator<=(std::size_t val) const noexcept {
-				return m_val <= val;
-			}
-			bool operator>(std::size_t val) const noexcept {
-				return !(*this <= val);
-			}
-			bool operator>=(std::size_t val) const noexcept {
-				return !(*this < val);
-			}
-			Counter &operator++() noexcept {
-				++m_val;
-				return *this;
-			}
-			std::size_t operator*() const noexcept {
-				return m_val;
-			}
-			std::size_t m_val{0};
-		};
+		/** Map structure to store matched optional arguments */
+		using Matched_Opts = std::unordered_map<std::string, std::vector<std::string>>;
 
 		std::vector<std::string> m_positional_order;
 		std::unordered_map<std::string, std::unique_ptr<Positional_Info>> m_positional_args;
@@ -415,83 +385,121 @@ namespace cpparse {
 		std::unordered_map<char, std::string> m_flags;
 
 		/**
-		 * Attempt to parse the user-provided command-line arguments.
-		 *
-		 * @param argc  command-line argument count
-		 * @param argv  command-line argument strings
-		 * @return the parsed positional and optional argument values.
-		 * @throw std::runtime_error  If a positional argument is missing, a value for
-		 *                            an optional argument is missing, or an optional
-		 *                            argument value was supplied an incorrect number of
-		 *                            times.
+		 * Parse the command-line arguments into tokens and match/assign them to their
+		 * corresponding parameters.
 		 */
-		std::pair<std::vector<const char *>, std::unordered_map<std::string, std::vector<std::string>>> match_args(
-				int argc, const char **argv) const {
-			std::vector<const char *> positional_args;
-			std::unordered_map<std::string, std::vector<std::string>> optional_args;
-			for (auto &&arg_info : prematch_args(argc, argv, positional_args, optional_args)) {
-				if (arg_info.option_name.empty())
-					positional_args.push_back(std::move(arg_info.arg));
-				else
-					optional_args[arg_info.option_name].push_back(std::move(arg_info.option_value));
-			}
-			return std::make_pair(std::move(positional_args), std::move(optional_args));
-		}
-
-		std::vector<Arg_Info> prematch_args(int argc, const char **argv,
-				std::vector<const char *> &positional_args,
-				std::unordered_map<std::string, std::vector<std::string>> &optional_args) const {
-			std::vector<Arg_Info> arg_infos;
-			arg_infos.reserve(argc - 1);
-			std::size_t positional_count = 0;
-			std::unordered_map<std::string, Counter> optional_occurs;
-			for (int argi = 1; argi < argc; ++argi) {
-				Arg_Info arg_info;
-				arg_info.arg = argv[argi];
-				arg_info.option_name = lookup_formatted_option_name(arg_info.arg);
-				if (arg_info.option_name.empty())
-					++positional_count;
-				else
-					arg_info.option_value = prematch_optional_arg(arg_info.option_name,
-							++optional_occurs[arg_info.option_name] > 1, argi, argc, argv);
-				arg_infos.push_back(std::move(arg_info));
-			}
-			if (positional_count < m_positional_order.size())
-				throw std::runtime_error{errstr("requires positional argument '", m_positional_order[positional_count], "'")};
-
-			positional_args.reserve(positional_count);
-			for (const auto &pair : optional_occurs)
-				optional_args[pair.first].reserve(*pair.second);
-			return arg_infos;
+		std::vector<const char *> assign_user_args(int argc, const char **argv) {
+			std::vector<const char *> pos_args;
+			Matched_Opts opt_args;
+			std::tie(pos_args, opt_args) = match_args(argc, argv);
+			assign_matched_opt(std::move(opt_args));
+			return assign_matched_pos(std::move(pos_args));
 		}
 
 		/**
-		 * Parse optional argument from the list of user-provided arguments.
+		 * Assign the matched positional arguments to their corresponding parameters.
 		 */
-		std::string prematch_optional_arg(const std::string &option_name, bool repeated, int &argi, int argc, const char **argv) const {
-			if (option_name == "help") {
-				print_help();
-				std::exit(0);
-			}
+		std::vector<const char *> assign_matched_pos(const std::vector<const char *> &pos_args) {
+			for (std::size_t i = 0; i < m_positional_order.size(); ++i)
+				m_positional_args[m_positional_order[i]]->set_value(pos_args[i]);
+			return std::vector<const char *>(pos_args.data() + m_positional_order.size(), pos_args.data() + pos_args.size());
+		}
 
-			auto it = m_optional_args.find(option_name);
-			if (it == m_optional_args.end())
-				throw std::runtime_error{errstr("invalid option '", option_name, "', pass --help to display possible options")};
+		/**
+		 * Assign the matched optional arguments to their corresponding parameters.
+		 */
+		void assign_matched_opt(Matched_Opts &&optional_args) {
+			for (auto &&pair : std::move(optional_args))
+				m_optional_args[pair.first]->set_values(std::move(pair.second));
+		}
 
-			if (it->second->type() == Optional_Info::Type::FLAG) {
-				if (repeated)
-					throw std::runtime_error{errstr("'", option_name, "' should only be specified once")};
-				return "true";
-			} else {
-				if (++argi == argc)
-					throw std::runtime_error{errstr("'", option_name, "' requires a value")};
-				std::string string_arg{argv[argi]};
-				if (valid_option_name(string_arg))
-					throw std::runtime_error{errstr("'", option_name, "' requires a value")};
-				if (it->second->type() != Optional_Info::Type::APPEND && repeated)
-					throw std::runtime_error{errstr("'", option_name, "' should only be specified once")};
-				return string_arg;
+		/**
+		 * Parse the command-line arguments into tokens and match them to their
+		 * corresponding parameters.
+		 */
+		std::pair<std::vector<const char *>, Matched_Opts> match_args(int argc, const char **argv) const {
+			std::vector<const char *> pos_args;
+			std::vector<Opt_Token> opt_args;
+			std::tie(pos_args, opt_args) = tokenize_args(argc, argv);
+			return std::make_pair(pos_args, match_opt_args(opt_args));
+		}
+
+		/**
+		 * Match the tokenized arguments to their corresponding optional parameters.
+		 */
+		Matched_Opts match_opt_args(const std::vector<Opt_Token> &arg_tokens) const {
+			auto optional_args = init_matched_opt_args(arg_tokens);
+			const std::string *p_last_optional;
+			for (const auto &token : arg_tokens) {
+				switch (token.type) {
+				case Opt_Token::Type::OPT_NAME:
+					p_last_optional = &token.value;
+					break;
+				case Opt_Token::Type::OPT_VAL:
+					optional_args[*p_last_optional].push_back(std::move(token.value));
+					break;
+				case Opt_Token::Type::FLAG:
+					optional_args[token.value].push_back("true");
+					break;
+				}
 			}
+			return optional_args;
+		}
+
+		/**
+		 * Initialize the map used to store matched optional arguments.
+		 */
+		Matched_Opts init_matched_opt_args(const std::vector<Opt_Token> &arg_tokens) const {
+			Matched_Opts optional_args;
+			const auto optional_counts = count_opt_args(arg_tokens);
+			optional_args.reserve(optional_counts.size());
+			for (const auto &pair : optional_counts)
+				optional_args[pair.first].reserve(pair.second);
+			return optional_args;
+		}
+
+		/**
+		 * Count the number of optional arguments from the token list.
+		 */
+		std::unordered_map<std::string, std::size_t> count_opt_args(const std::vector<Opt_Token> &tokens) const {
+			std::unordered_map<std::string, std::size_t> optional_counts;
+			for (const auto &token : tokens) {
+				if (token.type == Opt_Token::Type::OPT_NAME || token.type == Opt_Token::Type::FLAG)
+					++optional_counts[token.value];
+			}
+			return optional_counts;
+		}
+
+		/**
+		 * Parse the command-line arguments into tokens that provide information for the
+		 * next parsing step.
+		 */
+		std::pair<std::vector<const char *>, std::vector<Opt_Token>> tokenize_args(int argc, const char **argv) const {
+			const std::vector<const char *> user_args(argv + 1, argv + argc);
+			std::vector<const char *> pos_args;
+			pos_args.reserve(user_args.size());
+			std::vector<Opt_Token> opt_tokens;
+			opt_tokens.reserve(user_args.size());
+
+			std::unordered_set<std::string> optional_names;
+			for (auto it = user_args.begin(); it != user_args.end(); ++it) {
+				auto optional_name = lookup_formatted_option_name(*it);
+				if (optional_name.empty()) {
+					pos_args.push_back(*it);
+				} else {
+					if (prematch_optional_arg(optional_name, optional_names.find(optional_name) != optional_names.end(), *std::next(it), *(user_args.end()))) {
+						opt_tokens.push_back(Opt_Token{Opt_Token::Type::OPT_NAME, optional_name});
+						opt_tokens.push_back(Opt_Token{Opt_Token::Type::OPT_VAL, *(++it)});
+					} else {
+						opt_tokens.push_back(Opt_Token{Opt_Token::Type::FLAG, optional_name});
+					}
+					optional_names.insert(optional_name);
+				}
+			}
+			if (pos_args.size() < m_positional_order.size())
+				throw std::runtime_error{errstr("requires positional argument '", m_positional_order[pos_args.size()], "'")};
+
+			return std::make_pair(pos_args, opt_tokens);
 		}
 
 		/**
@@ -507,6 +515,44 @@ namespace cpparse {
 				return flag_it->second;
 			}
 			return format_option_name(option_name);
+		}
+
+		/**
+		 * Perform initial validation/matching on the optional argument.
+		 */
+		bool prematch_optional_arg(const std::string &option_name, bool repeated, const char *next_arg, const char *args_end) const {
+			if (option_name == "help") {
+				print_help();
+				std::exit(0);
+			}
+
+			auto it = m_optional_args.find(option_name);
+			if (it == m_optional_args.end())
+				throw std::runtime_error{errstr("invalid option '", option_name, "', pass --help to display possible options")};
+
+			if (it->second->type() == Optional_Info::Type::FLAG) {
+				if (repeated)
+					throw std::runtime_error{errstr("'", option_name, "' should only be specified once")};
+				return false;
+			} else {
+				if (next_arg == args_end)
+					throw std::runtime_error{errstr("'", option_name, "' requires a value")};
+				if (valid_option_name(next_arg))
+					throw std::runtime_error{errstr("'", option_name, "' requires a value")};
+				if (it->second->type() != Optional_Info::Type::APPEND && repeated)
+					throw std::runtime_error{errstr("'", option_name, "' should only be specified once")};
+				return true;
+			}
+		}
+
+		/**
+		 * Update the command-line argument variables to refer to any extra positional
+		 * arguments that have not been matched.
+		 */
+		void remove_matched(const std::vector<const char *> &extra_positional_args, int &argc, const char **&argv) const {
+			argc = extra_positional_args.size() + 1;
+			for (std::size_t i = 0; i < extra_positional_args.size(); ++i)
+				argv[i + 1] = extra_positional_args[i];
 		}
 
 		/**
