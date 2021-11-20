@@ -27,8 +27,29 @@ namespace cpparse {
 	class Argument_Parser {
 	public:
 
-		Argument_Parser() {
-			add_optional("-h", "--help", Optional_Info::Type::FLAG).help("display this help text");
+		/**
+		 * Configuration options builder.
+		 */
+		class Options {
+			friend class Argument_Parser;
+			bool m_auto_help{true};  // Automatically add a '-h/--help' flag
+		public:
+			Options() noexcept { }
+
+			Options &auto_help(bool auto_help) noexcept {
+				m_auto_help = auto_help;
+				return *this;
+			}
+		};
+
+		/**
+		 * Construct argument parser instance.
+		 *
+		 * @param opts  configuration options
+		 */
+		Argument_Parser(const Options &opts = Options{}) {
+			if (opts.m_auto_help)
+				add_optional("-h", "--help", Optional_Info::Type::FLAG).help("display this help text");
 		}
 
 		/**

@@ -8,10 +8,11 @@
 #include <catch2/catch.hpp>
 
 using namespace Catch::Matchers;
+using namespace cpparse;
 
-using Opt_Type = cpparse::Optional_Info::Type;
+using Opt_Type = Optional_Info::Type;
 
-static bool help_contains(cpparse::Argument_Parser &parser, const std::string &str) {
+static bool help_contains(Argument_Parser &parser, const std::string &str) {
 	std::ostringstream out;
 	parser.print_help(out);
 	return out.str().find(str) != std::string::npos;
@@ -21,21 +22,34 @@ TEST_CASE("Argument_Parser help text") {
 	static const std::string desc_str{"program descrition"};
 	static const std::string pos_help{"some positional argument"};
 	static const std::string opt_help{"some optional argument"};
+	static const std::string help_text{"display this help text"};
 
-	cpparse::Argument_Parser parser;
+	Argument_Parser parser{Argument_Parser::Options{}.auto_help(false)};
 	REQUIRE(!help_contains(parser, desc_str));
+	REQUIRE(!help_contains(parser, "Positional arguments:"));
 	REQUIRE(!help_contains(parser, pos_help));
+	REQUIRE(!help_contains(parser, "Options:"));
+	REQUIRE(!help_contains(parser, "[options]"));
 	REQUIRE(!help_contains(parser, opt_help));
+	REQUIRE(!help_contains(parser, help_text));
 
 	parser.set_description(desc_str);
 	REQUIRE(parser.description() == desc_str);
 	REQUIRE(help_contains(parser, desc_str));
 
 	parser.add_positional("pos").help(pos_help);
+	REQUIRE(help_contains(parser, "Positional arguments:"));
 	REQUIRE(help_contains(parser, pos_help));
 
 	parser.add_optional("--opt").help(opt_help);
+	REQUIRE(help_contains(parser, "Options:"));
+	REQUIRE(help_contains(parser, "[options]"));
 	REQUIRE(help_contains(parser, opt_help));
+
+	parser = Argument_Parser{};
+	REQUIRE(help_contains(parser, "Options:"));
+	REQUIRE(help_contains(parser, "[options]"));
+	REQUIRE(help_contains(parser, help_text));
 }
 
 TEST_CASE("Argument_Parser add_positional()") {
