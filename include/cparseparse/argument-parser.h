@@ -4,12 +4,12 @@
  * GitHub: https://github.com/MatthewRasa
  */
 
-#ifndef CPPARSE_ARGUMENT_PARSER
-#define CPPARSE_ARGUMENT_PARSER
+#ifndef CPARSEPARSE_ARGUMENT_PARSER
+#define CPARSEPARSE_ARGUMENT_PARSER
 
-#include "cpparse/optional-info.h"
-#include "cpparse/positional-info.h"
-#include "cpparse/util/compat.h"
+#include "cparseparse/optional-info.h"
+#include "cparseparse/positional-info.h"
+#include "cparseparse/util/compat.h"
 #include <regex>
 #include <unordered_map>
 #include <unordered_set>
@@ -635,4 +635,4 @@ namespace cpparse {
 
 }
 
-#endif /* CPPARSE_ARGUMENT_PARSER */
+#endif /* CPARSEPARSE_ARGUMENT_PARSER */

@@ -4,8 +4,8 @@
  * GitHub: https://github.com/MatthewRasa
  */
 
-#ifndef CPPARSE_UTIL_COMPAT_H_
-#define CPPARSE_UTIL_COMPAT_H_
+#ifndef CPARSEPARSE_UTIL_COMPAT_H_
+#define CPARSEPARSE_UTIL_COMPAT_H_
 
 #include <memory>
 
@@ -29,4 +29,4 @@ namespace cpparse {
 #endif /* __cplusplus >= 201703L */
 }
 
-#endif /* CPPARSE_UTIL_COMPAT_H_ */
+#endif /* CPARSEPARSE_UTIL_COMPAT_H_ */

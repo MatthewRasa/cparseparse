@@ -4,7 +4,7 @@
  * GitHub: https://github.com/MatthewRasa
  */
 
-#include "cpparse/argument-parser.h"
+#include "cparseparse/argument-parser.h"
 #include <catch2/catch.hpp>
 
 using namespace Catch::Matchers;

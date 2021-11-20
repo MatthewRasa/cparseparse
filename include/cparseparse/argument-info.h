@@ -4,11 +4,11 @@
  * GitHub: https://github.com/MatthewRasa
  */
 
-#ifndef CPPARSE_ARGUMENT_INFO_H_
-#define CPPARSE_ARGUMENT_INFO_H_
+#ifndef CPARSEPARSE_ARGUMENT_INFO_H_
+#define CPARSEPARSE_ARGUMENT_INFO_H_
 
-#include "cpparse/util/errstr.h"
-#include "cpparse/util/string-ops.h"
+#include "cparseparse/util/errstr.h"
+#include "cparseparse/util/string-ops.h"
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -159,4 +159,4 @@ namespace cpparse {
 
 }
 
-#endif /* CPPARSE_ARGUMENT_INFO_H_ */
+#endif /* CPARSEPARSE_ARGUMENT_INFO_H_ */

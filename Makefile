@@ -25,12 +25,12 @@ clean-example:
 clean: clean-test clean-example
 
 install:
-	@for path in $(shell find include/cpparse -type f); do \
+	@for path in $(shell find include/cparseparse -type f); do \
 		install -v -D $$path $(PREFIX)/$$path; \
 	done
 
 uninstall:
-	@rm -rvf $(PREFIX)/include/cpparse
+	@rm -rvf $(PREFIX)/include/cparseparse
 
 run-tests: test
 	./test/unit-tests

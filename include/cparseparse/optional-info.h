@@ -4,12 +4,12 @@
  * GitHub: https://github.com/MatthewRasa
  */
 
-#ifndef CPPARSE_OPTIONAL_INFO_H_
-#define CPPARSE_OPTIONAL_INFO_H_
+#ifndef CPARSEPARSE_OPTIONAL_INFO_H_
+#define CPARSEPARSE_OPTIONAL_INFO_H_
 
-#include "cpparse/argument-info.h"
-#include "cpparse/util/compat.h"
-#include "cpparse/util/string-ops.h"
+#include "cparseparse/argument-info.h"
+#include "cparseparse/util/compat.h"
+#include "cparseparse/util/string-ops.h"
 #include <algorithm>
 #include <vector>
 
@@ -230,4 +230,4 @@ namespace cpparse {
 
 }
 
-#endif /* CPPARSE_OPTIONAL_INFO_H_ */
+#endif /* CPARSEPARSE_OPTIONAL_INFO_H_ */

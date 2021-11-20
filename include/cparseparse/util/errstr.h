@@ -4,8 +4,8 @@
  * GitHub: https://github.com/MatthewRasa
  */
 
-#ifndef CPPARSE_UTIL_ERRSTR_H_
-#define CPPARSE_UTIL_ERRSTR_H_
+#ifndef CPARSEPARSE_UTIL_ERRSTR_H_
+#define CPARSEPARSE_UTIL_ERRSTR_H_
 
 #include <sstream>
 #include <string>
@@ -57,4 +57,4 @@ namespace cpparse {
 
 }
 
-#endif /* CPPARSE_UTIL_ERRSTR_H_ */
+#endif /* CPARSEPARSE_UTIL_ERRSTR_H_ */

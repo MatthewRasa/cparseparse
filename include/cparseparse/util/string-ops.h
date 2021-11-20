@@ -4,8 +4,8 @@
  * GitHub: https://github.com/MatthewRasa
  */
 
-#ifndef CPPARSE_UTIL_STRING_OPS_H_
-#define CPPARSE_UTIL_STRING_OPS_H_
+#ifndef CPARSEPARSE_UTIL_STRING_OPS_H_
+#define CPARSEPARSE_UTIL_STRING_OPS_H_
 
 #include <algorithm>
 #include <stdexcept>
@@ -33,4 +33,4 @@ namespace cpparse {
 
 }
 
-#endif /* CPPARSE_UTIL_STRING_OPS_H_ */
+#endif /* CPARSEPARSE_UTIL_STRING_OPS_H_ */

@@ -4,10 +4,10 @@
  * GitHub: https://github.com/MatthewRasa
  */
 
-#ifndef CPPARSE_POSITIONAL_INFO_H_
-#define CPPARSE_POSITIONAL_INFO_H_
+#ifndef CPARSEPARSE_POSITIONAL_INFO_H_
+#define CPARSEPARSE_POSITIONAL_INFO_H_
 
-#include "cpparse/argument-info.h"
+#include "cparseparse/argument-info.h"
 
 namespace cpparse {
 
@@ -65,4 +65,4 @@ namespace cpparse {
 
 }
 
-#endif /* CPPARSE_POSITIONAL_INFO_H_ */
+#endif /* CPARSEPARSE_POSITIONAL_INFO_H_ */
