@@ -43,9 +43,10 @@ namespace cpparse {
 		 * Print argument description.
 		 *
 		 * @param text_width  text width spacing
+		 * @param out         output stream
 		 */
-		void print(std::size_t text_width) const {
-			print_help(text_width);
+		void print(std::size_t text_width, std::ostream &out = std::cout) const {
+			print_help(text_width, out);
 		}
 
 	private:

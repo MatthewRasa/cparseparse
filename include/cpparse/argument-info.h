@@ -79,9 +79,10 @@ namespace cpparse {
 		 * Print the argument name and help text.
 		 *
 		 * @param text_width  text width spacing
+		 * @param out         output stream
 		 */
-		void print_help(std::size_t text_width) const {
-			print_help(m_name, text_width);
+		void print_help(std::size_t text_width, std::ostream &out = std::cout) const {
+			print_help(m_name, text_width, out);
 		}
 
 		/**
@@ -89,9 +90,10 @@ namespace cpparse {
 		 *
 		 * @param name        argument name
 		 * @param text_width  text width spacing
+		 * @param out         output stream
 		 */
-		void print_help(const std::string &name, std::size_t text_width) const {
-			std::cout << "  " << std::left << std::setw(text_width - 2) << name << m_help_text << std::endl;
+		void print_help(const std::string &name, std::size_t text_width, std::ostream &out = std::cout) const {
+			out << "  " << std::left << std::setw(text_width - 2) << name << m_help_text << std::endl;
 		}
 
 		/**

@@ -149,15 +149,16 @@ namespace cpparse {
 		 * Print argument description.
 		 *
 		 * @param text_width  text width spacing
+		 * @param out         output stream
 		 */
-		void print(std::size_t text_width) const {
+		void print(std::size_t text_width, std::ostream &out = std::cout) const {
 			std::stringstream ss;
 			if (has_flag())
 				ss << "-" << m_flag << ", ";
 			ss << "--" << m_name;
 			if (m_type != Type::FLAG)
 				ss << " " << str_to_upper(m_name);
-			print_help(ss.str(), text_width);
+			print_help(ss.str(), text_width, out);
 		}
 
 	private:

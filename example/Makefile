@@ -6,13 +6,13 @@
 
 ODIR := obj
 CDIR := src
-BDIR := bin
+APP := sort-string
 
 include ../common.mk
 
-$(BDIR)/sort-string: $(OLIST)
+$(APP): $(OLIST)
 	@mkdir -p $(shell dirname $@)
 	$(CC) -o $@ $(CPPFLAGS) $(CXXFLAGS) $^
 
 clean:
-	@rm -rvf $(BDIR) $(ODIR)
+	@rm -rvf $(APP) $(ODIR)

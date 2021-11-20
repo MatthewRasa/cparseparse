@@ -32,6 +32,26 @@ namespace cpparse {
 		}
 
 		/**
+		 * Retrieve the program description.
+		 *
+		 * @return the program description string
+		 */
+		const std::string &description() const noexcept {
+			return m_description;
+		}
+
+		/**
+		 * Set the program description.
+		 *
+		 * @tparam String      string-like type that is convertible to @a std::string
+		 * @param description  description string
+		 */
+		template<class String>
+		void set_description(String &&description) noexcept {
+			m_description = std::forward<String>(description);
+		}
+
+		/**
 		 * Define a positional argument with the given name.
 		 *
 		 * The assigned name is referenced in the help text and can be passed to arg()
@@ -294,30 +314,36 @@ namespace cpparse {
 
 		/**
 		 * Print usage text to stdout.
+		 *
+		 * @param out  output stream [default: @a std::cout]
 		 */
-		void print_usage() const {
-			std::cout << "Usage: " << _scriptname;
+		void print_usage(std::ostream &out = std::cout) const {
+			out << "Usage: " << _scriptname;
 			if (!m_optional_args.empty())
-				std::cout << " [options]";
+				out << " [options]";
 			for (const auto &positional : m_positional_order)
-				std::cout << " <" << positional << ">";
-			std::cout << std::endl;
+				out << " <" << positional << ">";
+			out << std::endl;
 		}
 
 		/**
 		 * Print help text to stdout.
+		 *
+		 * @param out  output stream [default: @a std::cout]
 		 */
-		void print_help() const {
-			print_usage();
+		void print_help(std::ostream &out = std::cout) const {
+			print_usage(out);
+			if (!m_description.empty())
+				out << std::endl << "  " << m_description << std::endl;
 			if (!m_positional_order.empty()) {
-				std::cout << std::endl << "Positional arguments:" << std::endl;
+				out << std::endl << "Positional arguments:" << std::endl;
 				for (const auto &positional : m_positional_order)
-					m_positional_args.at(positional)->print(20);
+					m_positional_args.at(positional)->print(20, out);
 			}
 			if (!m_optional_args.empty()) {
-				std::cout << std::endl << "Options:" << std::endl;
+				out << std::endl << "Options:" << std::endl;
 				for (const auto &optional : m_optional_order)
-					m_optional_args.at(optional)->print(30);
+					m_optional_args.at(optional)->print(30, out);
 			}
 		}
 
@@ -378,6 +404,7 @@ namespace cpparse {
 		/** Map structure to store matched optional arguments */
 		using Matched_Opts = std::unordered_map<std::string, std::vector<std::string>>;
 
+		std::string m_description;
 		std::vector<std::string> m_positional_order;
 		std::unordered_map<std::string, std::unique_ptr<Positional_Info>> m_positional_args;
 		std::vector<std::string> m_optional_order;

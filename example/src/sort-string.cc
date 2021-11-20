@@ -45,6 +45,7 @@ void run_program(std::string string_val, bool invert, unsigned int repeat, const
 int main(int argc, char *argv[]) {
 	// Define command-line parameters
 	cpparse::Argument_Parser parser;
+	parser.set_description("Sort the provided string with a variety of options");
 	parser.add_positional("string").help("string to sort");
 	parser.add_optional("-i", "--invert", Opt_Type::FLAG).help("invert sort to put string in reverse order");
 	parser.add_optional("-r", "--repeat", Opt_Type::SINGLE).help("print REPEAT instances of the string [default: 1]");
