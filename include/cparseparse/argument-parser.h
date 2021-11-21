@@ -48,8 +48,15 @@ namespace cpparse {
 		 * @param opts  configuration options
 		 */
 		Argument_Parser(const Options &opts = Options{}) {
-			if (opts.m_auto_help)
+			if (opts.m_auto_help) {
 				add_optional("-h", "--help", Optional_Info::Type::FLAG).help("display this help text");
+				set_help_handler([](const Argument_Parser &parser) {
+					parser.print_help();
+					std::exit(0);
+				});
+			} else {
+				set_help_handler([](const Argument_Parser &) noexcept { });
+			}
 		}
 
 		/**
@@ -70,6 +77,17 @@ namespace cpparse {
 		template<class String>
 		void set_description(String &&description) noexcept {
 			m_description = std::forward<String>(description);
+		}
+
+		/**
+		 * Set the handler invoked on '-h/--help'.
+		 *
+		 * @tparam Callable     callable type
+		 * @param help_handler  help handler callable
+		 */
+		template<class Callable>
+		void set_help_handler(Callable &&help_handler) noexcept {
+			m_help_handler = std::forward<Callable>(help_handler);
 		}
 
 		/**
@@ -425,6 +443,7 @@ namespace cpparse {
 		/** Map structure to store matched optional arguments */
 		using Matched_Opts = std::unordered_map<std::string, std::vector<std::string>>;
 
+		std::function<void(const Argument_Parser &)> m_help_handler;
 		std::string m_description;
 		std::vector<std::string> m_positional_order;
 		std::unordered_map<std::string, std::unique_ptr<Positional_Info>> m_positional_args;
@@ -569,10 +588,8 @@ namespace cpparse {
 		 * Perform initial validation/matching on the optional argument.
 		 */
 		bool prematch_optional_arg(const std::string &option_name, bool repeated, const char *next_arg, const char *args_end) const {
-			if (option_name == "help") {
-				print_help();
-				std::exit(0);
-			}
+			if (option_name == "help")
+				m_help_handler(*this);
 
 			auto it = m_optional_args.find(option_name);
 			if (it == m_optional_args.end())

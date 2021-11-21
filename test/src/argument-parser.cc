@@ -18,6 +18,12 @@ static bool help_contains(Argument_Parser &parser, const std::string &str) {
 	return out.str().find(str) != std::string::npos;
 }
 
+static void invoke_parse_args(Argument_Parser &parser, std::vector<const char *> args) {
+	int argc = args.size();
+	auto argv = args.data();
+	parser.parse_args(argc, argv);
+};
+
 TEST_CASE("Argument_Parser help text") {
 	static const std::string desc_str{"program descrition"};
 	static const std::string pos_help{"some positional argument"};
@@ -50,6 +56,24 @@ TEST_CASE("Argument_Parser help text") {
 	REQUIRE(help_contains(parser, "Options:"));
 	REQUIRE(help_contains(parser, "[options]"));
 	REQUIRE(help_contains(parser, help_text));
+}
+
+TEST_CASE("Argument_Parser help handler") {
+	bool invoked{false};
+	Argument_Parser parser{};
+	parser.set_help_handler([&invoked](const Argument_Parser &) { invoked = true; });
+	SECTION("not called") {
+		invoke_parse_args(parser, {"test-program"});
+		REQUIRE(!invoked);
+	}
+	SECTION("called via flag") {
+		invoke_parse_args(parser, {"test-program", "-h"});
+		REQUIRE(invoked);
+	}
+	SECTION("called via long") {
+		invoke_parse_args(parser, {"test-program", "--help"});
+		REQUIRE(invoked);
+	}
 }
 
 TEST_CASE("Argument_Parser add_positional()") {
