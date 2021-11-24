@@ -94,10 +94,11 @@ namespace cpparse {
 		}
 
 		/**
-		 * Retrieve the argument as a value of type T.
+		 * Retrieve the argument as a value of type @a T.
 		 *
 		 * @tparam T  type to retrieve the argument as
-		 * @return the argument as a value of type T
+		 * @return the argument as a value of type @a T
+		 * @throw std::runtime_error  if the argument cannot be parsed as type @a T
 		 */
 		template<class T>
 		T as_type() const {
@@ -105,13 +106,14 @@ namespace cpparse {
 		}
 
 		/**
-		 * Retrieve the argument as a value of type T.
+		 * Retrieve the argument as a value of type @a T.
 		 *
 		 * If the argument was not specified by the user, the given default value is used.
 		 *
 		 * @tparam T           type to retrieve the argument as
 		 * @param default_val  default value to use if the argument was not specified by the user
-		 * @return the argument as a value of type T
+		 * @return the argument as a value of type @a T
+		 * @throw std::runtime_error  if the argument cannot be parsed as type @a T
 		 */
 		template<class T>
 		T as_type(T &&default_val) const {
@@ -119,11 +121,12 @@ namespace cpparse {
 		}
 
 		/**
-		 * Retrieve the argument at the given index as a value of type T.
+		 * Retrieve the argument at the given index as a value of type @a T.
 		 *
 		 * @tparam T   type to retrieve the argument as
 		 * @param idx  index at which to retrieve value
-		 * @return the argument as a value of type T
+		 * @return the argument as a value of type @a T
+		 * @throw std::runtime_error  if the argument cannot be parsed as type @a T
 		 */
 		template<class T>
 		T as_type_at(std::size_t idx) const {
@@ -131,18 +134,38 @@ namespace cpparse {
 		}
 
 		/**
-		 * Retrieve the argument at the given index as a value of type T.
+		 * Retrieve the argument at the given index as a value of type @a T.
 		 *
 		 * If the argument was not specified by the user, the given default value is used.
 		 *
 		 * @tparam T           type to retrieve the argument as
 		 * @param idx          index at which to retrieve value
 		 * @param default_val  default value to use if the argument was not specified by the user
-		 * @return the argument as a value of type T
+		 * @return the argument as a value of type @a T
+		 * @throw std::runtime_error  if the argument cannot be parsed as type @a T
 		 */
 		template<class T>
 		T as_type_at(std::size_t idx, T &&default_val) const {
 			return as_type_at<T, true>(idx, std::forward<T>(default_val));
+		}
+
+		/**
+		 * Retrieve the list of values that the user supplied for the given argument.
+		 *
+		 * All of the user-supplied values will be parsed as type @a T and returned in a
+		 * vector. If no values were supplied, an empty vector is returned.
+		 *
+		 * @tparam T  type to parse arguments as
+		 * @return a vector containing the user-supplied values parsed as type @a T
+		 * @throw std::runtime_error  if the argument cannot be parsed as type @a T
+		 */
+		template<class T>
+		std::vector<T> as_type_all() const {
+			std::vector<T> values;
+			values.reserve(count());
+			for (std::size_t i = 0; i < count(); ++i)
+				values.push_back(as_type_at<T>(i));
+			return values;
 		}
 
 		/**
@@ -172,7 +195,7 @@ namespace cpparse {
 		std::vector<std::string> m_values;
 
 		/**
-		 * Retrieve the argument at the given index as a value of type T.
+		 * Retrieve the argument at the given index as a value of type @a T.
 		 *
 		 * If the argument was not specified by the user but a default value was given, the default value is used.
 		 *
@@ -180,7 +203,7 @@ namespace cpparse {
 		 * @tparam has_default  compile-time boolean indicating whether a default value was given
 		 * @param idx           index at which to retrieve value
 		 * @param default_val   default value to use if the argument was not specified by the user
-		 * @return the argument as a value of type T
+		 * @return the argument as a value of type @a T
 		 * @throw std::logic_error  if no value was provided for the argument
 		 */
 		template<class T, bool has_default>

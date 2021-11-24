@@ -29,10 +29,11 @@ namespace cpparse {
 				: Argument_Info{std::forward<String>(name)} { }
 
 		/**
-		 * Retrieve the argument as a value of type T.
+		 * Retrieve the argument as a value of type @a T.
 		 *
 		 * @tparam T  type to retrieve the argument as
-		 * @return the argument as a value of type T
+		 * @return the argument as a value of type @a T
+		 * @throw std::runtime_error  if the argument cannot be parsed as type @a T
 		 */
 		template<class T>
 		T as_type() const noexcept(noexcept(parse_as_type<T>(std::string{}))) {

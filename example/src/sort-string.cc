@@ -46,29 +46,29 @@ int main(int argc, char *argv[]) {
 	// Define command-line parameters
 	cpparse::Argument_Parser parser;
 	parser.set_description("Sort the provided string with a variety of options");
-	parser.add_positional("string").help("string to sort");
-	parser.add_optional("-i", "--invert", Opt_Type::FLAG).help("invert sort to put string in reverse order");
-	parser.add_optional("-r", "--repeat", Opt_Type::SINGLE).help("print REPEAT instances of the string [default: 1]");
-	parser.add_optional("-f", "--filter", Opt_Type::APPEND).help("filter out the given character (may be specified more than once)");
-	parser.add_optional("--show-time", Opt_Type::FLAG).help("display the time it took to complete the sort");
+	auto &string = parser.add_positional("string").help("string to sort");
+	auto &invert = parser.add_optional("-i", "--invert", Opt_Type::FLAG).help("invert sort to put string in reverse order");
+	auto &repeat = parser.add_optional("-r", "--repeat", Opt_Type::SINGLE).help("print REPEAT instances of the string [default: 1]");
+	auto &filter = parser.add_optional("-f", "--filter", Opt_Type::APPEND).help("filter out the given character (may be specified more than once)");
+	auto &show_time = parser.add_optional("--show-time", Opt_Type::FLAG).help("display the time it took to complete the sort");
 
 	// Attempt to parse the user-provided arguments
 	try {
 		parser.parse_args(argc, argv);
 		// After parsing, matched arguments are removed from argc/argv such that
 		// only unmatched positional arguments remain.
+
+		// Extract parsed arguments and run the program!
+		run_program(string.as_type<std::string>(),
+					invert.as_type<bool>(),
+					repeat.as_type<unsigned int>(1),
+					filter.as_type_all<char>(),
+					show_time.as_type<bool>());
+		return 0;
 	} catch (const std::runtime_error &ex) {
 		// If parsing fails, report the exception and print the program usage
 		std::cerr << ex.what() << std::endl;
 		parser.print_usage();
 		return 1;
 	}
-
-	// Extract parsed arguments and run the program!
-	run_program(parser.arg<std::string>("string"),
-				parser.arg<bool>("invert"),
-				parser.arg<unsigned int>("repeat", 1),
-				parser.args<char>("filter"),
-				parser.arg<bool>("show-time"));
-	return 0;
 }
